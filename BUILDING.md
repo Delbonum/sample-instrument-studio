@@ -130,20 +130,29 @@ bereits aufgelöst, Spuren ohne geladenes Sample fallen weg. Der Plan wird über
 Spin-Lock-Übergabe veröffentlicht; klingende Stimmen halten ihren alten Plan selbst am Leben,
 und freigegeben wird er ausschließlich auf dem Message-Thread (Timer im Prozessor).
 
-Eine Note startet eine Stimme, die alle Spuren ihrer Zone übereinanderlegt — jede mit ihrem
-Versatz auf der 8-Sekunden-Achse, ihrem Ausschnitt, ihren Fades und ihrer Tonhöhe
-(Abstand zum Grundton + Spur-Halbtöne + Cent). Die Hüllkurve des Instruments gilt für die
+Eine Note startet eine Stimme, die alle Spuren ihrer Zone übereinanderlegt. Eine Spur trägt
+beliebig viele Clips, jeder mit seinem Versatz auf der Zeitachse, seinem Ausschnitt und seinen
+Fades; die Tonhöhe (Abstand zum Grundton + Spur-Halbtöne + Cent) gilt für die ganze Spur.
+Überlappen sich Clips, klingt der obere – außer in seinen Fades. Der Plan zerlegt jeden Clip
+deshalb in die Abschnitte, in denen er zu hören ist (`geometry::audibleSegments`), und legt
+je Abschnitt eine Schicht mit `gateStart/EndSeconds` an; an inneren Kanten wird 3 ms
+geblendet, damit nichts knackt. Eine Schleife klingt bis zum nächsten Clip der Spur. Die Hüllkurve des Instruments gilt für die
 ganze Stimme. Die Anschlagstärke wählt die Zone und skaliert den Pegel.
 
 **Time-Stretch:** Bei Stretch 1,00× wird direkt abgespielt. Sonst legt die Engine überlappende
 Körner (halbe Kornlänge Versatz, Hann-Fenster) aneinander: der Lesezeiger innerhalb eines Korns
 folgt der Tonhöhe, die Körner selbst rücken langsamer oder schneller vor. Dauer und Tonhöhe sind
-damit unabhängig. Die vier Algorithmen aus dem README wählen bisher nur die Körnung
+damit unabhängig. Dasselbe Verfahren transponiert mit **gehaltenem Tempo** (`Track::keepTempo`):
+dann rückt die Zeit nur mit der Samplerate des Samples vor, die Tonhöhe übernehmen die Körner.
+Direkt gelesen wird, sobald Zeit- und Tonhöhenfortschritt gleich sind. Die vier Algorithmen aus dem README wählen bisher nur die Körnung
 (768 … 6144 Samples); eine echte Transienten-Erkennung bzw. ein Phasenvokoder fehlt noch, bei
 starker Dehnung tonalen Materials hört man das typische Schwimmen.
 
 **Wiedergabe (Play / Leertaste):** spielt die gewählte Zone auf ihrem Grundton an — die
-Spur-Versätze ergeben den zeitlichen Aufbau, LOOP wiederholt alle 8 Sekunden. Die Laufmarke
+Clip-Versätze ergeben den zeitlichen Aufbau. Gespielt wird ab dem Locator: der Prozessor meldet
+der Engine vorher den Versatz (`SamplerEngine::setStartOffset`), und der nächste Anschlag genau
+dieser Note überspringt, was davor liegt. LOOP wiederholt ab dem Locator, nach mindestens
+8 Sekunden oder am Ende des letzten Clips. Die Laufmarke
 im Editor folgt einem Timer der Oberfläche, nicht der Audio-Uhr; bei langen Tönen können
 Bild und Ton um einige Millisekunden auseinanderlaufen.
 
@@ -351,7 +360,7 @@ Alles andere wandert hinein: Spur-Pegel, Panorama, Tonhöhe, Trim, Fades, Zeitde
 gesamte Effektkette. Die neue Spur steht deshalb auf Pegel 1,0, Panorama Mitte und ohne
 Effekte.
 
-Die Länge ergibt sich aus der Zeitachse der Zone (größtes `offset + clipLength`), dazu zwei
+Die Länge ergibt sich aus der Zeitachse der Zone (Ende des letzten Clips, höchstens 128 s), dazu zwei
 Sekunden Nachklang für Hall und fremde Plugins; hinten wird die Stille wieder abgeschnitten.
 Am Ende des Körpers wird die Note losgelassen, damit Schleifen aufhören und nur noch der
 Nachklang stehen bleibt.
