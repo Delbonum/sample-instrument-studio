@@ -1,0 +1,33 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "ninja-debug",
+      "displayName": "Ninja, Debug (Windows: in einer Developer-Shell oder über build.ps1)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ninja-debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "ninja-release",
+      "displayName": "Ninja, Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ninja-release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "xcode",
+      "displayName": "Xcode (macOS, inkl. AU)",
+      "generator": "Xcode",
+      "binaryDir": "${sourceDir}/build/xcode"
+    }
+  ],
+  "buildPresets": [
+    { "name": "standalone-debug", "configurePreset": "ninja-debug", "targets": ["SampleInstrumentStudio_Standalone"] },
+    { "name": "tests", "configurePreset": "ninja-debug", "targets": ["SisClipGeometryTests"] },
+    { "name": "release", "configurePreset": "ninja-release" }
+  ],
+  "testPresets": [
+    { "name": "debug", "configurePreset": "ninja-debug", "output": { "outputOnFailure": true } }
+  ]
+}

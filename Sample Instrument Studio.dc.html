@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#E3E1DC}
+  a{color:#7A6CF0;text-decoration:none}
+  a:hover{color:#5546CE}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  input,select{font:inherit;color:inherit}
+  ::selection{background:#DAD5FC}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#CFCBC3;border:3px solid transparent;background-clip:content-box;border-radius:6px}
+</style>
+</helmet>
+<div style="height:100vh;min-height:700px;display:flex;flex-direction:column;background:#E3E1DC;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#191817;-webkit-font-smoothing:antialiased">
+
+<sc-if value="{{ isStandalone }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;min-height:0;display:flex;flex-direction:column">
+
+  <div style="height:34px;flex:none;display:flex;align-items:stretch;background:#DEDBD5;border-bottom:1px solid #C4C0B8">
+    <div style="display:flex;align-items:center;gap:9px;padding:0 12px;min-width:0">
+      <img src="assets/sis_icon.png" alt="" style="width:17px;height:17px;flex:none;object-fit:contain" />
+      <div style="font-size:12px;color:#3A3833;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Nocturne Hybrid Bass.sisp — Sample Instrument Studio</div>
+    </div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:stretch">
+      <button style="width:44px;display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#3A3833" style-hover="background:#CFCCC6">—</button>
+      <button style="width:44px;display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#3A3833" style-hover="background:#CFCCC6">□</button>
+      <button style="width:44px;display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#3A3833" style-hover="background:#B4553F;color:#FFFFFF">✕</button>
+    </div>
+  </div>
+
+  <sc-if value="{{ showMenubar }}" hint-placeholder-val="{{ true }}">
+  <div style="height:26px;flex:none;display:flex;align-items:stretch;padding:0 4px;background:#EDEBE7;border-bottom:1px solid #D6D3CD;position:relative;z-index:40">
+    <sc-for list="{{ menus }}" as="m" hint-placeholder-count="5">
+      <div style="position:relative">
+        <button data-k="{{ m.id }}" onClick="{{ onMenu }}" onMouseEnter="{{ onMenuHover }}" style="height:100%;padding:0 10px;font-size:12px;background:{{ m.bg }};color:{{ m.fg }}">{{ m.label }}</button>
+        <sc-if value="{{ m.open }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:0;top:26px;width:262px;background:#FFFFFF;border:1px solid #BFBBB3;box-shadow:0 10px 26px rgba(25,24,23,0.16);padding:3px">
+          <sc-for list="{{ m.items }}" as="it" hint-placeholder-count="6">
+            <div>
+              <sc-if value="{{ it.sep }}" hint-placeholder-val="{{ false }}">
+              <div style="height:1px;background:#E4E1DB;margin:3px 0"></div>
+              </sc-if>
+              <sc-if value="{{ it.isItem }}" hint-placeholder-val="{{ true }}">
+              <button data-k="{{ it.id }}" data-l="{{ it.label }}" onClick="{{ onMenuItem }}" style="width:100%;display:flex;align-items:center;gap:8px;padding:5px 8px;text-align:left;font-size:12px" style-hover="background:#F1EFFD">
+                <div style="width:12px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5546CE">{{ it.check }}</div>
+                <div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.label }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">{{ it.key }}</div>
+              </button>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+  </sc-if>
+
+  <div style="height:46px;flex:none;display:flex;align-items:center;gap:6px;padding:0 12px;background:#EDEBE7;border-bottom:1px solid #D6D3CD;flex-wrap:nowrap">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+      <button data-k="{{ t.id }}" onClick="{{ setView }}" style="padding:7px 13px;font-size:12.5px;font-weight:500;background:{{ t.bg }};color:{{ t.fg }};border-bottom:2px solid {{ t.bd }}">{{ t.label }}</button>
+    </sc-for>
+    <div style="flex:1"></div>
+    <button onClick="{{ togglePlay }}" style="width:34px;height:30px;display:grid;place-items:center;background:{{ playBg }};color:{{ playFg }};border:1px solid #D6D3CD;font-family:'IBM Plex Mono',monospace;font-size:12px">{{ playGlyph }}</button>
+    <button onClick="{{ toggleLoop }}" style="height:30px;padding:0 10px;background:{{ loopBg }};color:{{ loopFg }};border:1px solid #D6D3CD;font-family:'IBM Plex Mono',monospace;font-size:11px">LOOP</button>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6E6B66;letter-spacing:0.04em;margin-left:6px">MASTER</div>
+    <div data-k="gain" onPointerDown="{{ onTrack }}" style="width:88px;height:6px;background:#DCD9D3;cursor:ew-resize;position:relative">
+      <div style="position:absolute;inset:0 auto 0 0;width:{{ gainPct }}%;background:#7A6CF0"></div>
+    </div>
+    <div style="width:52px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#56534E">{{ gainDb }}</div>
+    <button onClick="{{ goExport }}" style="padding:7px 13px;background:#7A6CF0;color:#FFFFFF;font-size:12px;font-weight:500;white-space:nowrap" style-hover="background:#5546CE">Exportieren</button>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex">
+
+    <sc-if value="{{ showLeft }}" hint-placeholder-val="{{ true }}">
+    <div style="width:264px;flex:none;display:flex;flex-direction:column;background:#F4F3F0;border-right:1px solid #D6D3CD;overflow:hidden">
+
+      <sc-if value="{{ vEditor }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+        <div style="height:34px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid #E1DED8">
+          <div style="width:9px;height:9px;flex:none;background:{{ trColor }}"></div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Spur · {{ trName }}</div>
+        </div>
+        <div style="flex:1;min-height:0;overflow-y:auto">
+          <div style="padding:12px;border-bottom:1px solid #E1DED8;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;width:42px">GAIN</div>
+              <div data-k="trackGain" onPointerDown="{{ onTrack }}" style="flex:1;height:5px;background:#DCD9D3;position:relative;cursor:ew-resize">
+                <div style="position:absolute;inset:0 auto 0 0;width:{{ trGainPct }}%;background:{{ trColor }}"></div>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;width:50px;text-align:right;color:#56534E">{{ trGainText }}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;width:42px">PAN</div>
+              <div data-k="trackPan" onPointerDown="{{ onTrack }}" style="flex:1;height:5px;background:#DCD9D3;position:relative;cursor:ew-resize">
+                <div style="position:absolute;top:0;bottom:0;left:{{ trPanLeft }}%;width:{{ trPanWidth }}%;background:{{ trColor }}"></div>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;width:50px;text-align:right;color:#56534E">{{ trPanText }}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;width:42px">FADES</div>
+              <div style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#56534E">{{ trFadeText }}</div>
+            </div>
+          </div>
+          <div style="padding:12px;border-bottom:1px solid #E1DED8">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E;margin-bottom:9px">Tonhöhe &amp; Zeit</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+              <button onClick="{{ pitchDown }}" style="width:26px;height:26px;border:1px solid #C4C0B8;background:#FFFFFF">–</button>
+              <div style="flex:1;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:14px">{{ trPitchText }}</div>
+              <button onClick="{{ pitchUp }}" style="width:26px;height:26px;border:1px solid #C4C0B8;background:#FFFFFF">+</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;width:42px">CENT</div>
+              <div data-k="trackCents" onPointerDown="{{ onTrack }}" style="flex:1;height:5px;background:#DCD9D3;position:relative;cursor:ew-resize">
+                <div style="position:absolute;inset:0 auto 0 0;width:{{ trCentsPct }}%;background:{{ trColor }}"></div>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;width:50px;text-align:right;color:#56534E">{{ trCentsText }}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;width:42px">STRETCH</div>
+              <div style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px">{{ trStretchText }}</div>
+              <button onClick="{{ resetStretch }}" style="padding:4px 8px;border:1px solid #C4C0B8;background:#FFFFFF;font-family:'IBM Plex Mono',monospace;font-size:10px">1:1</button>
+            </div>
+            <select value="{{ trAlgo }}" onChange="{{ onAlgo }}" style="width:100%;margin-top:9px;padding:5px 6px;background:#FFFFFF;border:1px solid #C4C0B8;font-size:11.5px;outline:none">
+              <option>Transienten-treu</option>
+              <option>Glatt (Pad)</option>
+              <option>Monophon</option>
+              <option>Korn / Granular</option>
+            </select>
+            <div style="display:flex;gap:6px;margin-top:9px">
+              <button onClick="{{ toggleReverse }}" style="flex:1;padding:6px 8px;font-size:11.5px;background:{{ revBg }};color:{{ revFg }};border:1px solid {{ revBd }}">Umkehren</button>
+              <select value="{{ trLoop }}" onChange="{{ onLoopMode }}" style="flex:1;min-width:0;padding:5px 6px;background:#FFFFFF;border:1px solid #C4C0B8;font-size:11.5px;outline:none">
+                <option>One-Shot</option>
+                <option>Sustain-Loop</option>
+                <option>Vor/Rückwärts</option>
+              </select>
+            </div>
+          </div>
+          <div style="padding:12px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E;flex:1">Effekte der Spur</div>
+              <div style="position:relative">
+                <button onClick="{{ toggleFxMenu }}" style="padding:3px 7px;border:1px solid #C4C0B8;background:#FFFFFF;font-size:11px">+</button>
+                <sc-if value="{{ fxMenu }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;right:0;top:26px;width:222px;background:#FFFFFF;border:1px solid #BFBBB3;box-shadow:0 8px 24px rgba(25,24,23,0.14);z-index:30;padding:4px">
+                  <sc-for list="{{ builtins }}" as="b" hint-placeholder-count="8">
+                    <button data-k="{{ b.name }}" onClick="{{ addFx }}" style="width:100%;text-align:left;padding:6px 8px;font-size:12px" style-hover="background:#F1EFFD">{{ b.name }}</button>
+                  </sc-for>
+                  <div style="height:1px;background:#E4E1DB;margin:4px 0"></div>
+                  <button data-k="__ext" onClick="{{ addFx }}" style="width:100%;text-align:left;padding:6px 8px;font-size:12px;color:#5546CE" style-hover="background:#F1EFFD">Externes Plugin … (VST3 / AU)</button>
+                </div>
+                </sc-if>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+              <sc-for list="{{ fxRows }}" as="x" hint-placeholder-count="2">
+                <div style="background:{{ x.bg }};border:1px solid #E1DED8;padding:8px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <button data-k="{{ x.i }}" onClick="{{ toggleFx }}" style="width:26px;height:14px;flex:none;background:{{ x.swBg }};position:relative;border:1px solid #D6D3CD">
+                      <div style="position:absolute;top:1px;left:{{ x.swLeft }}px;width:10px;height:10px;background:#FFFFFF"></div>
+                    </button>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:11.5px;font-weight:500;color:{{ x.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ x.name }}</div>
+                      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:{{ x.kindFg }}">{{ x.kind }}</div>
+                    </div>
+                    <sc-if value="{{ x.isExt }}" hint-placeholder-val="{{ false }}">
+                    <button data-k="{{ x.i }}" onClick="{{ openPlugin }}" style="padding:3px 7px;border:1px solid #C4C0B8;background:#FFFFFF;font-size:10.5px;white-space:nowrap">Öffnen</button>
+                    </sc-if>
+                    <button data-k="{{ x.i }}" onClick="{{ removeFx }}" style="width:18px;flex:none;color:#6E6B66;font-size:13px" style-hover="color:#B4553F">×</button>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:5px;margin-top:7px">
+                    <sc-for list="{{ x.params }}" as="p" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;width:52px">{{ p.l }}</div>
+                        <div data-k="fxParam" data-i="{{ x.i }}" data-j="{{ p.j }}" onPointerDown="{{ onTrack }}" style="flex:1;height:5px;background:#DCD9D3;position:relative;cursor:ew-resize">
+                          <div style="position:absolute;inset:0 auto 0 0;width:{{ p.pct }}%;background:{{ p.fill }}"></div>
+                        </div>
+                        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;width:34px;text-align:right;color:#56534E">{{ p.d }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66;margin-top:10px;line-height:1.5">Plugin-Ordner wie in der DAW · 41 gefunden</div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ vBrowser }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+        <div style="height:34px;flex:none;display:flex;align-items:center;padding:0 12px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E;border-bottom:1px solid #E1DED8">Samples</div>
+        <div style="padding:10px 12px;flex:none">
+          <input value="{{ search }}" onChange="{{ onSearch }}" placeholder="Suchen …" style="width:100%;padding:6px 8px;background:#FBFAF8;border:1px solid #D6D3CD;font-size:12px;outline:none" />
+        </div>
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:0 6px 8px">
+          <sc-for list="{{ files }}" as="f" hint-placeholder-count="7">
+            <button data-k="{{ f.i }}" onClick="{{ openFile }}" style="width:100%;display:flex;align-items:center;gap:9px;padding:7px 6px;text-align:left;background:{{ f.bg }}" style-hover="background:#E9E7E2">
+              <div style="width:42px;height:22px;flex:none;display:flex;align-items:center;gap:1px">
+                <sc-for list="{{ f.bars }}" as="b" hint-placeholder-count="14">
+                  <div style="flex:1;height:{{ b.h }}%;background:{{ b.c }}"></div>
+                </sc-for>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.name }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">{{ f.meta }}</div>
+              </div>
+            </button>
+          </sc-for>
+        </div>
+        <div style="flex:none;margin:8px 10px 12px;padding:14px 10px;border:1px dashed #C4C0B8;text-align:center">
+          <div style="font-size:11.5px;color:#56534E">Dateien hierher ziehen</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66;margin-top:4px">WAV · AIFF · FLAC · MP3</div>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+    </sc-if>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#E9E7E3;overflow:hidden">
+
+      <sc-if value="{{ vMapping }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 16px">
+        <div style="flex:none;display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+          <div style="font-size:13px;font-weight:600">Tastatur-Zonen</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">Klick wählt · Doppelklick öffnet den Editor</div>
+          <div style="flex:1"></div>
+          <button onClick="{{ addZone }}" style="padding:6px 11px;background:#FBFAF8;border:1px solid #C4C0B8;font-size:11.5px" style-hover="background:#FFFFFF">Zone hinzufügen</button>
+        </div>
+        <div style="flex:1;min-height:150px;display:flex;gap:8px">
+          <sc-if value="{{ velAxis }}" hint-placeholder-val="{{ true }}">
+          <div style="width:30px;flex:none;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;padding:2px 0;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">
+            <div>127</div>
+            <div>64</div>
+            <div>0</div>
+          </div>
+          </sc-if>
+          <div style="flex:1;position:relative;background:#FBFAF8;border:1px solid #D6D3CD;overflow:hidden">
+            <sc-for list="{{ octaveLines }}" as="o" hint-placeholder-count="6">
+              <div style="position:absolute;top:0;bottom:0;width:1px;left:{{ o.left }}%;background:#E4E1DB"></div>
+            </sc-for>
+            <div style="position:absolute;left:0;right:0;top:50%;border-top:1px dashed #E4E1DB"></div>
+            <sc-for list="{{ zoneRects }}" as="z" hint-placeholder-count="5">
+              <div data-k="{{ z.id }}" onClick="{{ selectZone }}" onDoubleClick="{{ openZone }}" style="position:absolute;left:{{ z.left }}%;width:{{ z.width }}%;top:{{ z.top }}%;height:{{ z.height }}%;background:{{ z.bg }};border:1px solid {{ z.bd }};box-shadow:{{ z.ring }};cursor:pointer;padding:7px 9px;overflow:hidden">
+                <div style="font-size:11.5px;font-weight:500;color:#191817;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ z.name }}</div>
+                <sc-if value="{{ z.showInfo }}" hint-placeholder-val="{{ true }}">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ z.info }}</div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex:none;padding:12px 0 0;display:flex;gap:8px">
+          <sc-if value="{{ velAxis }}" hint-placeholder-val="{{ true }}">
+          <div style="width:30px;flex:none"></div>
+          </sc-if>
+          <div style="flex:1;position:relative;height:92px;background:#FBFAF8;border:1px solid #BFBBB3;user-select:none">
+            <div style="position:absolute;inset:0;display:flex">
+              <sc-for list="{{ whiteKeys }}" as="k" hint-placeholder-count="42">
+                <div data-k="{{ k.note }}" onPointerDown="{{ onKey }}" style="flex:1;border-right:1px solid #DCD9D3;background:{{ k.bg }};display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;cursor:pointer;overflow:hidden">
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">{{ k.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-for list="{{ blackKeys }}" as="k" hint-placeholder-count="30">
+              <div data-k="{{ k.note }}" onPointerDown="{{ onKey }}" style="position:absolute;top:0;height:56px;left:{{ k.left }}%;width:{{ k.width }}%;background:{{ k.bg }};cursor:pointer"></div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ vEditor }}">
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+
+        <div style="flex:none;display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid #D6D3CD;flex-wrap:wrap">
+          <button onClick="{{ backToMap }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5546CE">‹ Mapping</button>
+          <div style="font-size:13px;font-weight:600">Zone {{ zName }}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">{{ dragHint }}</div>
+          <div style="flex:1"></div>
+          <div style="display:flex;padding:2px;background:#E1DED8;border:1px solid #D6D3CD">
+            <sc-for list="{{ edgeModes }}" as="e" hint-placeholder-count="2">
+              <button data-k="{{ e.id }}" onClick="{{ setEdgeMode }}" style="padding:4px 10px;font-size:11px;background:{{ e.bg }};color:{{ e.fg }}">{{ e.label }}</button>
+            </sc-for>
+          </div>
+          <button onClick="{{ toggleSnap }}" style="padding:6px 10px;font-size:11.5px;background:{{ snapBg }};color:{{ snapFg }};border:1px solid {{ snapBd }}">Raster</button>
+          <button onClick="{{ addTrack }}" style="padding:6px 10px;background:#FBFAF8;border:1px solid #C4C0B8;font-size:11.5px">Spur hinzufügen</button>
+          <button onClick="{{ bounce }}" style="padding:6px 12px;background:#191817;color:#FFFFFF;font-size:11.5px">Zone bouncen</button>
+        </div>
+
+        <div style="flex:none;display:flex;background:#F1EFEB;border-bottom:1px solid #D6D3CD">
+          <div style="width:140px;flex:none;border-right:1px solid #D6D3CD"></div>
+          <div style="flex:1;min-width:0;display:flex">
+            <sc-for list="{{ ruler }}" as="r" hint-placeholder-count="8">
+              <div style="flex:1;padding-left:4px;border-right:1px solid #E4E1DB;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66;line-height:20px">{{ r.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="flex:1;min-height:80px;overflow-y:auto;background:#E9E7E3">
+          <sc-for list="{{ trackRows }}" as="t" hint-placeholder-count="3">
+            <div style="display:flex;border-bottom:1px solid #DCD9D3;background:{{ t.rowBg }}">
+              <div data-k="{{ t.i }}" onClick="{{ selectTrack }}" style="width:140px;flex:none;padding:8px 9px;border-right:1px solid #D6D3CD;cursor:pointer;display:flex;flex-direction:column;gap:6px;background:{{ t.headBg }}">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div style="width:8px;height:8px;flex:none;background:{{ t.color }}"></div>
+                  <div style="flex:1;min-width:0;font-size:11.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.name }}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:5px">
+                  <button data-k="mute" data-i="{{ t.i }}" onClick="{{ onTrackBtn }}" style="width:21px;height:18px;font-family:'IBM Plex Mono',monospace;font-size:10px;border:1px solid #D6D3CD;background:{{ t.muteBg }};color:{{ t.muteFg }}">M</button>
+                  <button data-k="solo" data-i="{{ t.i }}" onClick="{{ onTrackBtn }}" style="width:21px;height:18px;font-family:'IBM Plex Mono',monospace;font-size:10px;border:1px solid #D6D3CD;background:{{ t.soloBg }};color:{{ t.soloFg }}">S</button>
+                  <div style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;text-align:right">{{ t.gainText }}</div>
+                </div>
+              </div>
+              <div data-lane="1" data-k="{{ t.i }}" onClick="{{ selectTrack }}" style="flex:1;min-width:0;position:relative;height:78px">
+                <sc-for list="{{ gridLines }}" as="g" hint-placeholder-count="8">
+                  <div style="position:absolute;top:0;bottom:0;width:1px;left:{{ g.left }}%;background:#E1DED8"></div>
+                </sc-for>
+                <div data-i="{{ t.i }}" data-mode="move" onPointerDown="{{ onClip }}" style="position:absolute;top:6px;bottom:6px;left:{{ t.offPct }}%;width:{{ t.lenPct }}%;background:{{ t.clipBg }};border:1px solid {{ t.color }};box-shadow:{{ t.clipRing }};cursor:grab;overflow:hidden;opacity:{{ t.op }}">
+                  <div style="height:15px;display:flex;align-items:center;gap:6px;padding:0 5px;background:{{ t.color }}">
+                    <div style="flex:1;min-width:0;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#FFFFFF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.clipName }}</div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#FFFFFF;white-space:nowrap">{{ t.stretchBadge }}</div>
+                  </div>
+                  <div style="position:absolute;left:0;right:0;top:15px;bottom:0;display:flex;align-items:center;padding:4px 0">
+                    <sc-for list="{{ t.bars }}" as="b" hint-placeholder-count="30">
+                      <div style="flex:1;height:{{ b.h }}%;background:{{ t.color }}"></div>
+                    </sc-for>
+                  </div>
+                  <div style="position:absolute;left:0;top:15px;bottom:0;width:{{ t.fadeInPct }}%;background:#FBFAF8;opacity:0.82;clip-path:polygon(0% 0%, 100% 0%, 0% 100%);pointer-events:none"></div>
+                  <div style="position:absolute;right:0;top:15px;bottom:0;width:{{ t.fadeOutPct }}%;background:#FBFAF8;opacity:0.82;clip-path:polygon(0% 0%, 100% 0%, 100% 100%);pointer-events:none"></div>
+                </div>
+                <div data-i="{{ t.i }}" data-mode="l" onPointerDown="{{ onClip }}" style="position:absolute;top:21px;bottom:6px;left:{{ t.offPct }}%;width:7px;cursor:ew-resize"></div>
+                <div data-i="{{ t.i }}" data-mode="r" onPointerDown="{{ onClip }}" style="position:absolute;top:21px;bottom:6px;left:{{ t.endPct }}%;width:7px;margin-left:-7px;cursor:ew-resize"></div>
+                <div data-i="{{ t.i }}" data-mode="fl" onPointerDown="{{ onClip }}" title="Fade ein" style="position:absolute;top:19px;left:{{ t.fadeInHandle }}%;width:11px;height:11px;margin-left:-5px;background:{{ t.color }};border:1px solid #FBFAF8;cursor:col-resize"></div>
+                <div data-i="{{ t.i }}" data-mode="fr" onPointerDown="{{ onClip }}" title="Fade aus" style="position:absolute;top:19px;left:{{ t.fadeOutHandle }}%;width:11px;height:11px;margin-left:-6px;background:{{ t.color }};border:1px solid #FBFAF8;cursor:col-resize"></div>
+                <div style="position:absolute;top:0;bottom:0;left:{{ phPct }}%;width:1px;background:#191817;opacity:{{ phOpacity }}"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="flex:none;height:186px;display:flex;flex-direction:column;background:#F1EFEB;border-top:1px solid #BFBBB3">
+          <div style="flex:none;display:flex;align-items:center;gap:8px;padding:8px 12px;flex-wrap:wrap">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E">Sample-Editor</div>
+            <div style="font-size:11.5px;font-weight:500">{{ trClipName }}</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">Auswahl {{ selText }}</div>
+            <div style="flex:1"></div>
+            <sc-for list="{{ tools }}" as="t" hint-placeholder-count="6">
+              <button data-k="{{ t.id }}" onClick="{{ onTool }}" style="padding:5px 9px;font-size:11px;background:{{ t.bg }};color:{{ t.fg }};border:1px solid {{ t.bd }}">{{ t.label }}</button>
+            </sc-for>
+          </div>
+          <div style="flex:1;min-height:0;margin:0 12px 12px;position:relative;background:#FBFAF8;border:1px solid #D6D3CD">
+            <div ref="{{ waveRef }}" style="position:absolute;inset:0;display:flex;align-items:center;padding:0 1px">
+              <sc-for list="{{ waveBars }}" as="b" hint-placeholder-count="120">
+                <div style="flex:1;height:{{ b.h }}%;background:{{ b.c }}"></div>
+              </sc-for>
+            </div>
+            <div style="position:absolute;top:0;bottom:0;left:{{ selLeft }}%;width:{{ selWidth }}%;border-left:1px solid #7A6CF0;border-right:1px solid #7A6CF0;background:rgba(122,108,240,0.07);pointer-events:none"></div>
+            <div data-side="a" onPointerDown="{{ onHandle }}" style="position:absolute;top:0;bottom:0;left:{{ selLeft }}%;width:9px;margin-left:-4px;cursor:ew-resize">
+              <div style="position:absolute;top:0;left:3px;width:3px;height:13px;background:#7A6CF0"></div>
+            </div>
+            <div data-side="b" onPointerDown="{{ onHandle }}" style="position:absolute;top:0;bottom:0;left:{{ selRight }}%;width:9px;margin-left:-5px;cursor:ew-resize">
+              <div style="position:absolute;top:0;left:3px;width:3px;height:13px;background:#7A6CF0"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ vExport }}">
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 16px;overflow-y:auto">
+        <div style="flex:none;font-size:13px;font-weight:600;margin-bottom:12px">Instrument exportieren</div>
+        <div style="flex:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
+          <sc-for list="{{ summary }}" as="s" hint-placeholder-count="4">
+            <div style="background:#FBFAF8;border:1px solid #D6D3CD;padding:12px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E">{{ s.label }}</div>
+              <div style="font-size:19px;font-weight:600;margin-top:6px">{{ s.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="flex:none;display:flex;flex-direction:column;gap:6px;max-width:620px">
+          <sc-for list="{{ targets }}" as="t" hint-placeholder-count="4">
+            <button data-k="{{ t.id }}" onClick="{{ toggleTarget }}" style="display:flex;align-items:center;gap:11px;padding:11px 12px;text-align:left;background:{{ t.bg }};border:1px solid {{ t.bd }}">
+              <div style="width:15px;height:15px;flex:none;border:1px solid {{ t.boxBd }};background:{{ t.boxBg }}"></div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12.5px;font-weight:500">{{ t.name }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66;margin-top:2px">{{ t.note }}</div>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#56534E">{{ t.size }}</div>
+            </button>
+          </sc-for>
+        </div>
+        <div style="flex:none;display:flex;align-items:center;gap:10px;margin-top:14px;max-width:620px">
+          <div style="flex:1;padding:8px 10px;background:#FBFAF8;border:1px solid #D6D3CD;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#56534E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">~/Instrumente/Nocturne Hybrid Bass/</div>
+          <button style="padding:8px 12px;border:1px solid #C4C0B8;background:#FFFFFF;font-size:11.5px">Ordner …</button>
+        </div>
+        <div style="flex:none;display:flex;align-items:center;gap:14px;margin-top:14px;max-width:620px">
+          <button onClick="{{ doExport }}" style="padding:9px 18px;background:#7A6CF0;color:#FFFFFF;font-size:12.5px;font-weight:500">{{ exportLabel }}</button>
+          <div style="flex:1;height:6px;background:#DCD9D3;position:relative">
+            <div style="position:absolute;inset:0 auto 0 0;width:{{ progPct }}%;background:#7A6CF0"></div>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#56534E;width:88px;text-align:right">{{ progText }}</div>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+
+    <sc-if value="{{ showRight }}" hint-placeholder-val="{{ true }}">
+    <div style="width:286px;flex:none;display:flex;flex-direction:column;background:#F4F3F0;border-left:1px solid #D6D3CD;overflow-y:auto">
+      <div style="height:34px;flex:none;display:flex;align-items:center;padding:0 12px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E;border-bottom:1px solid #E1DED8">Zone</div>
+      <div style="padding:12px;border-bottom:1px solid #E1DED8">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:10px;height:10px;flex:none;background:{{ zColor }}"></div>
+          <div style="font-size:13px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ zName }}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px">
+          <sc-for list="{{ zoneFields }}" as="f" hint-placeholder-count="4">
+            <div style="background:#FBFAF8;border:1px solid #E1DED8;padding:7px 8px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#56534E">{{ f.label }}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;margin-top:3px">{{ f.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="padding:12px;border-bottom:1px solid #E1DED8">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E;margin-bottom:10px">Hüllkurve</div>
+        <div style="height:56px;position:relative;background:#FBFAF8;border:1px solid #E1DED8;margin-bottom:10px;overflow:hidden">
+          <div style="position:absolute;inset:0;background:#7A6CF0;opacity:0.22;clip-path:{{ envClip }}"></div>
+        </div>
+        <sc-for list="{{ adsrRows }}" as="a" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;width:26px">{{ a.label }}</div>
+            <div data-k="{{ a.id }}" onPointerDown="{{ onTrack }}" style="flex:1;height:5px;background:#DCD9D3;position:relative;cursor:ew-resize">
+              <div style="position:absolute;inset:0 auto 0 0;width:{{ a.pct }}%;background:#7A6CF0"></div>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;width:52px;text-align:right;color:#56534E">{{ a.text }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:12px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E;margin-bottom:10px">Makros am Instrument</div>
+        <sc-for list="{{ macros }}" as="m" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+            <div style="font-size:11.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.name }}</div>
+            <div data-k="{{ m.id }}" onPointerDown="{{ onTrack }}" style="width:100px;height:5px;background:#DCD9D3;position:relative;cursor:ew-resize">
+              <div style="position:absolute;inset:0 auto 0 0;width:{{ m.pct }}%;background:#7A6CF0"></div>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;width:30px;text-align:right;color:#56534E">{{ m.text }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+  </div>
+
+  <div style="height:30px;flex:none;display:flex;align-items:center;gap:16px;padding:0 14px;background:#F4F3F0;border-top:1px solid #D6D3CD;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6E6B66">
+    <div style="color:#56534E">{{ statusLeft }}</div>
+    <div style="flex:1"></div>
+    <div>44.1 kHz · 24 Bit · Puffer 256</div>
+    <div>RAM 184 MB</div>
+    <div>CPU 9 %</div>
+  </div>
+
+</div>
+</sc-if>
+
+<sc-if value="{{ isPlugin }}">
+<div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:20px;background:#D9D7D2;overflow:auto">
+  <div style="width:100%;max-width:960px;position:relative;background:#F4F3F0;border:1px solid #BFBBB3;display:flex;flex-direction:column">
+    <div style="height:30px;flex:none;display:flex;align-items:center;gap:10px;padding:0 10px;background:#CFCCC6;border-bottom:1px solid #BFBBB3;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#4A4741">
+      <div>HOST · INSTRUMENT-SPUR 3</div>
+      <div style="flex:1"></div>
+      <div>SISTUDIO VST3</div>
+      <button data-k="standalone" onClick="{{ setShell }}" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#4A4741">IM STUDIO ÖFFNEN ↗</button>
+    </div>
+    <div style="flex:none;display:flex;align-items:center;gap:12px;padding:11px 13px;border-bottom:1px solid #D6D3CD">
+      <img src="assets/sis_icon.png" alt="" style="width:18px;height:18px;flex:none;object-fit:contain" />
+      <div style="font-size:13px;font-weight:600">Nocturne Hybrid Bass</div>
+      <div style="flex:1"></div>
+      <select style="padding:5px 7px;background:#FBFAF8;border:1px solid #C4C0B8;font-size:11.5px;outline:none">
+        <option>Preset: Sub + Air</option>
+        <option>Preset: Hard Attack</option>
+        <option>Preset: Tail Only</option>
+      </select>
+      <button onClick="{{ togglePlay }}" style="width:32px;height:28px;display:grid;place-items:center;border:1px solid #C4C0B8;background:{{ playBg }};color:{{ playFg }};font-family:'IBM Plex Mono',monospace;font-size:12px">{{ playGlyph }}</button>
+    </div>
+    <div style="flex:none;padding:13px;display:flex;gap:13px;flex-wrap:wrap">
+      <div style="flex:1;min-width:300px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E">Zonen</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">Doppelklick öffnet die Bearbeitung</div>
+        </div>
+        <div style="height:50px;position:relative;background:#FBFAF8;border:1px solid #D6D3CD">
+          <sc-for list="{{ zoneRects }}" as="z" hint-placeholder-count="5">
+            <div data-k="{{ z.id }}" onClick="{{ selectZone }}" onDoubleClick="{{ openSheet }}" style="position:absolute;top:0;bottom:0;left:{{ z.left }}%;width:{{ z.width }}%;background:{{ z.bg }};border-right:1px solid {{ z.bd }};box-shadow:{{ z.ring }};cursor:pointer;padding:5px 6px;overflow:hidden">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#191817;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ z.name }}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;margin-top:3px;white-space:nowrap">{{ z.short }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="flex:none">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E;margin-bottom:7px">Makros</div>
+        <div style="display:flex;gap:11px">
+          <sc-for list="{{ macros }}" as="m" hint-placeholder-count="4">
+            <div data-k="{{ m.id }}" onPointerDown="{{ onKnob }}" style="width:56px;text-align:center;cursor:ns-resize">
+              <div style="width:44px;height:44px;margin:0 auto;border:1px solid #BFBBB3;border-radius:50%;background:#FBFAF8;position:relative">
+                <div style="position:absolute;left:50%;top:50%;width:2px;height:17px;margin-left:-1px;background:#7A6CF0;transform-origin:50% 100%;transform:translateY(-100%) rotate({{ m.deg }}deg)"></div>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.short }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div style="flex:none;padding:0 13px 13px">
+      <div style="position:relative;height:72px;background:#FBFAF8;border:1px solid #BFBBB3;user-select:none">
+        <div style="position:absolute;inset:0;display:flex">
+          <sc-for list="{{ whiteKeys }}" as="k" hint-placeholder-count="42">
+            <div data-k="{{ k.note }}" onPointerDown="{{ onKey }}" style="flex:1;border-right:1px solid #DCD9D3;background:{{ k.bg }};cursor:pointer"></div>
+          </sc-for>
+        </div>
+        <sc-for list="{{ blackKeys }}" as="k" hint-placeholder-count="30">
+          <div data-k="{{ k.note }}" onPointerDown="{{ onKey }}" style="position:absolute;top:0;height:44px;left:{{ k.left }}%;width:{{ k.width }}%;background:{{ k.bg }};cursor:pointer"></div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="height:26px;flex:none;display:flex;align-items:center;gap:14px;padding:0 13px;background:#EDEBE7;border-top:1px solid #D6D3CD;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">
+      <div style="color:#56534E">{{ statusLeft }}</div>
+      <div style="flex:1"></div>
+      <div>{{ voiceText }}</div>
+    </div>
+
+    <sc-if value="{{ sheet }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(25,24,23,0.28);display:flex;align-items:center;justify-content:center;padding:14px">
+      <div style="width:100%;max-width:720px;background:#F4F3F0;border:1px solid #8A867F;box-shadow:0 18px 44px rgba(25,24,23,0.28);display:flex;flex-direction:column;max-height:100%">
+        <div style="flex:none;display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid #D6D3CD">
+          <div style="width:10px;height:10px;background:{{ zColor }}"></div>
+          <div style="font-size:12.5px;font-weight:600">Zone {{ zName }}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">{{ zShort }}</div>
+          <div style="flex:1"></div>
+          <button onClick="{{ closeSheet }}" style="width:22px;height:22px;color:#56534E;font-size:15px">×</button>
+        </div>
+        <div style="flex:none;padding:12px 13px 0;display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ trackRows }}" as="t" hint-placeholder-count="3">
+            <div data-k="{{ t.i }}" onClick="{{ selectTrack }}" style="display:flex;align-items:center;gap:9px;padding:7px 9px;background:{{ t.headBg }};border:1px solid {{ t.sheetBd }};cursor:pointer">
+              <div style="width:8px;height:8px;flex:none;background:{{ t.color }}"></div>
+              <div style="width:104px;flex:none;min-width:0;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.name }}</div>
+              <div style="flex:1;min-width:0;height:20px;display:flex;align-items:center;opacity:{{ t.op }}">
+                <sc-for list="{{ t.bars }}" as="b" hint-placeholder-count="30">
+                  <div style="flex:1;height:{{ b.h }}%;background:{{ t.color }}"></div>
+                </sc-for>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56534E;width:52px;text-align:right">{{ t.gainText }}</div>
+              <button data-k="mute" data-i="{{ t.i }}" onClick="{{ onTrackBtn }}" style="width:21px;height:18px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:10px;border:1px solid #D6D3CD;background:{{ t.muteBg }};color:{{ t.muteFg }}">M</button>
+            </div>
+          </sc-for>
+        </div>
+        <div style="flex:none;margin:12px 13px 13px;background:#F1EFEB;border:1px solid #D6D3CD">
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;flex-wrap:wrap">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#56534E">Sample-Editor</div>
+            <div style="font-size:11.5px;font-weight:500">{{ trClipName }}</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66">{{ selText }}</div>
+            <div style="flex:1"></div>
+            <sc-for list="{{ tools }}" as="t" hint-placeholder-count="6">
+              <button data-k="{{ t.id }}" onClick="{{ onTool }}" style="padding:4px 8px;font-size:10.5px;background:{{ t.bg }};color:{{ t.fg }};border:1px solid {{ t.bd }}">{{ t.label }}</button>
+            </sc-for>
+          </div>
+          <div style="height:96px;margin:0 10px 10px;position:relative;background:#FBFAF8;border:1px solid #D6D3CD">
+            <div ref="{{ sheetWaveRef }}" style="position:absolute;inset:0;display:flex;align-items:center;padding:0 1px">
+              <sc-for list="{{ waveBars }}" as="b" hint-placeholder-count="120">
+                <div style="flex:1;height:{{ b.h }}%;background:{{ b.c }}"></div>
+              </sc-for>
+            </div>
+            <div style="position:absolute;top:0;bottom:0;left:{{ selLeft }}%;width:{{ selWidth }}%;border-left:1px solid #7A6CF0;border-right:1px solid #7A6CF0;background:rgba(122,108,240,0.07);pointer-events:none"></div>
+            <div data-side="a" data-sheet="1" onPointerDown="{{ onHandle }}" style="position:absolute;top:0;bottom:0;left:{{ selLeft }}%;width:9px;margin-left:-4px;cursor:ew-resize">
+              <div style="position:absolute;top:0;left:3px;width:3px;height:13px;background:#7A6CF0"></div>
+            </div>
+            <div data-side="b" data-sheet="1" onPointerDown="{{ onHandle }}" style="position:absolute;top:0;bottom:0;left:{{ selRight }}%;width:9px;margin-left:-5px;cursor:ew-resize">
+              <div style="position:absolute;top:0;left:3px;width:3px;height:13px;background:#7A6CF0"></div>
+            </div>
+          </div>
+        </div>
+        <div style="flex:none;padding:0 13px 13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6E6B66;flex:1;min-width:180px;line-height:1.5">Spuren anlegen, Fades ziehen und Effekte: im Standalone-Studio</div>
+          <button data-k="standalone" onClick="{{ setShell }}" style="padding:7px 13px;background:#7A6CF0;color:#FFFFFF;font-size:11.5px">Im Studio bearbeiten</button>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;left:50%;bottom:52px;transform:translateX(-50%);padding:10px 16px;background:#191817;color:#F4F3F0;font-size:12px;z-index:60;box-shadow:0 10px 30px rgba(25,24,23,0.22)">{{ toast }}</div>
+</sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;shell&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;standalone&quot;,&quot;plugin&quot;],&quot;default&quot;:&quot;standalone&quot;,&quot;tsType&quot;:&quot;'standalone' | 'plugin'&quot;,&quot;section&quot;:&quot;Ansicht&quot;},&quot;startView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;mapping&quot;,&quot;editor&quot;,&quot;export&quot;],&quot;default&quot;:&quot;mapping&quot;,&quot;tsType&quot;:&quot;'mapping' | 'editor' | 'export'&quot;,&quot;section&quot;:&quot;Ansicht&quot;},&quot;edgeMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;trim&quot;,&quot;stretch&quot;],&quot;default&quot;:&quot;trim&quot;,&quot;tsType&quot;:&quot;'trim' | 'stretch'&quot;,&quot;section&quot;:&quot;Editor&quot;},&quot;velocityLayers&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Mapping&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.waveRef = React.createRef();
+    this.sheetWaveRef = React.createRef();
+    this.NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    this.builtinNames = ['Kanalfilter', 'Sättigung', 'Transienten', 'EQ 4-Band', 'Chorus', 'Hall (Plate)', 'Kompressor', 'Bit-Crusher'];
+    this.menuDefs = [
+      ['datei', 'Datei', [
+        ['new', 'Neues Instrument', 'Strg+N'], ['open', 'Öffnen … (.sisp)', 'Strg+O'], ['save', 'Speichern', 'Strg+S'], ['saveas', 'Speichern unter …', ''],
+        ['-', '', ''], ['import', 'Samples importieren …', 'Strg+I'], ['export', 'Instrument exportieren …', 'Strg+E'], ['-', '', ''], ['quit', 'Beenden', 'Alt+F4']
+      ]],
+      ['bearbeiten', 'Bearbeiten', [
+        ['undo', 'Rückgängig', 'Strg+Z'], ['redo', 'Wiederherstellen', 'Strg+Y'], ['-', '', ''],
+        ['cut', 'Ausschneiden', 'Strg+X'], ['copy', 'Kopieren', 'Strg+C'], ['paste', 'Einfügen', 'Strg+V'], ['-', '', ''], ['trimsel', 'Auf Auswahl zuschneiden', '']
+      ]],
+      ['ansicht', 'Ansicht', [
+        ['view:mapping', 'Mapping', 'F2'], ['view:editor', 'Editor', 'F3'], ['view:export', 'Export', 'F4'], ['-', '', ''],
+        ['togglemenu', 'Menüleiste', 'Strg+M'], ['toggleleft', 'Linke Spalte', 'F9'], ['toggleright', 'Rechte Spalte', 'F10'], ['-', '', ''],
+        ['togglevel', 'Velocity-Layer', ''], ['togglesnap', 'Am Raster einrasten', '']
+      ]],
+      ['instrument', 'Instrument', [
+        ['addzone', 'Zone hinzufügen', ''], ['addtrack', 'Spur hinzufügen', ''], ['-', '', ''], ['bounce', 'Zone bouncen', ''], ['macros', 'Makros zuweisen …', '']
+      ]],
+      ['hilfe', 'Hilfe', [
+        ['manual', 'Handbuch', 'F1'], ['keys', 'Tastaturkürzel', ''], ['-', '', ''], ['about', 'Über Sample Instrument Studio', '']
+      ]]
+    ];
+    const fx = (n, k, on, ext, ps) => ({ name: n, kind: k, on: on, ext: ext, params: ps });
+    const mk = (o) => Object.assign({ trimA: 0, trimB: 1, stretch: 1, fadeIn: 0.04, fadeOut: 0.12, cents: 0.5, reverse: false, algo: 'Transienten-treu', mute: false, solo: false }, o);
+    this.state = {
+      view: props.startView || 'mapping',
+      shell: props.shell || 'standalone',
+      menu: null,
+      showMenubar: true, showLeft: true, showRight: true,
+      edgeMode: props.edgeMode || 'trim',
+      zones: [
+        { id: 'z1', name: 'Sub Sustain', lo: 24, hi: 47, vlo: 0, vhi: 127, root: 36, samples: 3, color: '#7A6CF0' },
+        { id: 'z2', name: 'Hybrid Mid', lo: 48, hi: 66, vlo: 0, vhi: 86, root: 55, samples: 4, color: '#2E9E96' },
+        { id: 'z3', name: 'Hybrid Mid · hart', lo: 48, hi: 66, vlo: 87, vhi: 127, root: 55, samples: 2, color: '#2E9E96' },
+        { id: 'z4', name: 'Air Top', lo: 67, hi: 83, vlo: 0, vhi: 127, root: 72, samples: 3, color: '#C0862E' },
+        { id: 'z5', name: 'FX Tail', lo: 84, hi: 95, vlo: 0, vhi: 127, root: 88, samples: 1, color: '#B4553F' }
+      ],
+      zone: 'z1',
+      files: [
+        { name: 'sub_bow_C1_sustain.wav', meta: '4.21 s · 24 Bit', shape: 'sustain' },
+        { name: 'sub_bow_C1_soft.wav', meta: '3.90 s · 24 Bit', shape: 'sustain' },
+        { name: 'attack_klick_A.wav', meta: '0.31 s · 24 Bit', shape: 'attack' },
+        { name: 'attack_klick_B.wav', meta: '0.28 s · 24 Bit', shape: 'attack' },
+        { name: 'luft_obertoene.wav', meta: '2.60 s · 32 Bit', shape: 'air' },
+        { name: 'metall_tail_lang.wav', meta: '6.02 s · 24 Bit', shape: 'tail' },
+        { name: 'noise_atmo_loop.wav', meta: '8.00 s · 24 Bit', shape: 'air' }
+      ],
+      file: 0,
+      tracks: [
+        mk({ name: 'Sub Sustain', clip: 'sub_bow_C1_sustain.wav', color: '#7A6CF0', soft: '#EEEBFE', shape: 'sustain', off: 0, nat: 0.53, gain: 0.82, pan: 0, pitch: -2, loop: 'Sustain-Loop', fadeIn: 0.03, fadeOut: 0.18,
+          fx: [fx('Kanalfilter', 'Intern', true, false, [{ l: 'CUTOFF', v: 0.62 }, { l: 'RESO', v: 0.28 }]), fx('Sättigung', 'Intern', true, false, [{ l: 'DRIVE', v: 0.41 }, { l: 'MIX', v: 0.7 }])] }),
+        mk({ name: 'Attack Klick', clip: 'attack_klick_A.wav', color: '#C0862E', soft: '#FAF1DE', shape: 'attack', off: 0.01, nat: 0.09, gain: 0.54, pan: -0.18, pitch: 0, loop: 'One-Shot', fadeIn: 0, fadeOut: 0.22,
+          fx: [fx('Transienten', 'Intern', true, false, [{ l: 'ATTACK', v: 0.66 }])] }),
+        mk({ name: 'Luft / Obertöne', clip: 'luft_obertoene.wav', color: '#2E9E96', soft: '#E2F2F0', shape: 'air', off: 0.06, nat: 0.33, stretch: 1.28, gain: 0.36, pan: 0.22, pitch: 12, loop: 'Sustain-Loop', algo: 'Glatt (Pad)', fadeIn: 0.14, fadeOut: 0.2,
+          fx: [fx('ValhallaVintage', 'VST3 · extern', true, true, [{ l: 'GRÖSSE', v: 0.55 }, { l: 'MIX', v: 0.24 }])] })
+      ],
+      track: 0,
+      fxMenu: false, snap: true,
+      velLayers: props.velocityLayers !== false,
+      sel: [0.08, 0.62], tool: 'select',
+      playing: false, ph: 0, loopOn: true, gain: 0.74,
+      adsr: { a: 0.06, d: 0.3, s: 0.72, r: 0.44 },
+      macro: { m1: 0.62, m2: 0.35, m3: 0.5, m4: 0.18 },
+      targets: { vst3: true, au: true, standalone: false, pack: true },
+      exporting: false, prog: 0,
+      key: null, search: '', toast: '', sheet: false
+    };
+  }
+
+  componentDidMount() {
+    window.addEventListener('pointerdown', this.onDocDown, true);
+    window.addEventListener('keydown', this.onKeyDown);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('pointerdown', this.onDocDown, true);
+    window.removeEventListener('keydown', this.onKeyDown);
+    cancelAnimationFrame(this.raf); clearInterval(this.ivl); clearTimeout(this.kt); clearTimeout(this.tt);
+  }
+  onDocDown = (e) => {
+    if (this.state.menu && !e.target.closest('[data-k]')) this.setState({ menu: null });
+    if (this.state.fxMenu && !e.target.closest('[data-k]')) this.setState({ fxMenu: false });
+  };
+  onKeyDown = (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+    const k = e.key;
+    if ((e.ctrlKey || e.metaKey) && (k === 'm' || k === 'M')) { e.preventDefault(); this.toggleChrome('showMenubar', 'Menüleiste'); return; }
+    if (k === 'F9') { e.preventDefault(); this.toggleChrome('showLeft', 'Linke Spalte'); return; }
+    if (k === 'F10') { e.preventDefault(); this.toggleChrome('showRight', 'Rechte Spalte'); return; }
+    if (k === 'F2') { e.preventDefault(); this.setState({ view: 'mapping' }); return; }
+    if (k === 'F3') { e.preventDefault(); this.setState({ view: 'editor' }); return; }
+    if (k === 'F4') { e.preventDefault(); this.setState({ view: 'export' }); return; }
+    if (k === ' ') { e.preventDefault(); this.togglePlay(); }
+  };
+  toggleChrome(key, label) {
+    const next = !this.state[key];
+    this.setState({ [key]: next, menu: null });
+    const back = key === 'showMenubar' ? 'Strg+M' : (key === 'showLeft' ? 'F9' : 'F10');
+    this.flash(label + (next ? ' eingeblendet' : ' ausgeblendet · ' + back + ' holt sie zurück'));
+  }
+
+  wave(seed, n, shape) {
+    let s = seed * 9301 + 49297;
+    const r = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const t = i / Math.max(1, n - 1);
+      let e;
+      if (shape === 'attack') e = Math.pow(1 - t, 3.2);
+      else if (shape === 'air') e = Math.sin(Math.min(1, t * 1.25) * Math.PI) * 0.9;
+      else if (shape === 'tail') e = Math.pow(1 - t, 1.1) * (t < 0.04 ? t / 0.04 : 1);
+      else e = (t < 0.05 ? t / 0.05 : 1) * (1 - 0.45 * t);
+      out.push(Math.max(4, e * (0.42 + 0.58 * r()) * 96));
+    }
+    return out;
+  }
+
+  flash(msg) { clearTimeout(this.tt); this.setState({ toast: msg }); this.tt = setTimeout(() => this.setState({ toast: '' }), 2200); }
+  z() { return this.state.zones.find(z => z.id === this.state.zone) || this.state.zones[0]; }
+  t() { return this.nt(this.state.tracks[this.state.track] || this.state.tracks[0]); }
+  nt(t) {
+    return Object.assign({ name: 'Spur', clip: 'leer', color: '#6E6B66', soft: '#EFEEEA', shape: 'air', off: 0, nat: 0.3, stretch: 1, trimA: 0, trimB: 1, fadeIn: 0, fadeOut: 0, gain: 0.5, pan: 0, pitch: 0, cents: 0.5, reverse: false, loop: 'One-Shot', algo: 'Transienten-treu', mute: false, solo: false, fx: [] }, t || {});
+  }
+  clipLen(t) { const n = this.nt(t); return n.nat * n.stretch * (n.trimB - n.trimA); }
+  noteName(n) { return this.NAMES[n % 12] + (Math.floor(n / 12) - 1); }
+  patchTrack(fn) {
+    const i = this.state.track;
+    this.setState(s => ({ tracks: s.tracks.map((t, n) => n === i ? Object.assign({}, t, fn(t)) : t) }));
+  }
+
+  tick = (ts) => {
+    if (!this.state.playing) return;
+    const dt = Math.min(0.05, (ts - (this.last || ts)) / 1000);
+    this.last = ts;
+    let p = this.state.ph + dt / 8;
+    if (p > 1) { if (this.state.loopOn) p = 0; else { this.setState({ playing: false, ph: 0 }); return; } }
+    this.setState({ ph: p });
+    this.raf = requestAnimationFrame(this.tick);
+  };
+  togglePlay = () => {
+    if (this.state.playing) { cancelAnimationFrame(this.raf); this.setState({ playing: false }); return; }
+    this.last = 0;
+    this.setState({ playing: true, ph: 0 }, () => { this.raf = requestAnimationFrame(this.tick); });
+  };
+  toggleLoop = () => this.setState(s => ({ loopOn: !s.loopOn }));
+
+  onMenu = (e) => { const k = e.currentTarget.dataset.k; this.setState(s => ({ menu: s.menu === k ? null : k })); };
+  onMenuHover = (e) => { if (this.state.menu) this.setState({ menu: e.currentTarget.dataset.k }); };
+  onMenuItem = (e) => {
+    const k = e.currentTarget.dataset.k, l = e.currentTarget.dataset.l;
+    this.setState({ menu: null });
+    if (k.indexOf('view:') === 0) return this.setState({ view: k.slice(5) });
+    if (k === 'export') return this.setState({ view: 'export' });
+    if (k === 'togglemenu') return this.toggleChrome('showMenubar', 'Menüleiste');
+    if (k === 'toggleleft') return this.toggleChrome('showLeft', 'Linke Spalte');
+    if (k === 'toggleright') return this.toggleChrome('showRight', 'Rechte Spalte');
+    if (k === 'togglevel') return this.setState(s => ({ velLayers: !s.velLayers }));
+    if (k === 'togglesnap') return this.setState(s => ({ snap: !s.snap }));
+    if (k === 'addzone') return this.addZone();
+    if (k === 'addtrack') return this.addTrack();
+    if (k === 'bounce') return this.bounce();
+    if (k === 'trimsel') { this.setState({ sel: [0, 1] }); return this.flash('Auf Auswahl zugeschnitten'); }
+    this.flash(l);
+  };
+
+  setView = (e) => this.setState({ view: e.currentTarget.dataset.k, fxMenu: false });
+  setShell = (e) => this.setState({ shell: e.currentTarget.dataset.k, sheet: false });
+  setEdgeMode = (e) => this.setState({ edgeMode: e.currentTarget.dataset.k });
+  goExport = () => this.setState({ view: 'export' });
+  backToMap = () => this.setState({ view: 'mapping' });
+  selectZone = (e) => this.setState({ zone: e.currentTarget.dataset.k });
+  openZone = (e) => this.setState({ zone: e.currentTarget.dataset.k, view: 'editor' });
+  openSheet = (e) => this.setState({ zone: e.currentTarget.dataset.k, sheet: true });
+  closeSheet = () => this.setState({ sheet: false });
+  openFile = (e) => this.setState({ file: +e.currentTarget.dataset.k });
+  onSearch = (e) => this.setState({ search: e.target.value });
+  selectTrack = (e) => this.setState({ track: +e.currentTarget.dataset.k });
+  toggleSnap = () => this.setState(s => ({ snap: !s.snap }));
+
+  onTool = (e) => {
+    const t = e.currentTarget.dataset.k;
+    if (t === 'reverse') { const on = !this.t().reverse; this.patchTrack(() => ({ reverse: on })); return this.flash('Umgekehrt abspielen: ' + (on ? 'ein' : 'aus')); }
+    if (t === 'trim') {
+      const [a, b] = this.state.sel, tr = this.t();
+      this.patchTrack(t2 => ({ trimA: t2.trimA + a * (t2.trimB - t2.trimA), trimB: t2.trimA + b * (t2.trimB - t2.trimA) }));
+      this.setState({ sel: [0, 1] });
+      return this.flash('Clip auf Auswahl zugeschnitten · ' + tr.name);
+    }
+    if (t === 'norm') return this.flash('Normalisiert auf −0.3 dBFS');
+    if (t === 'fadein') { this.patchTrack(() => ({ fadeIn: 0.12 })); return this.flash('Fade ein gesetzt · Ecke im Clip ziehen ändert die Länge'); }
+    if (t === 'fadeout') { this.patchTrack(() => ({ fadeOut: 0.18 })); return this.flash('Fade aus gesetzt · Ecke im Clip ziehen ändert die Länge'); }
+    this.setState({ tool: t });
+  };
+  toggleReverse = () => { const on = !this.t().reverse; this.patchTrack(() => ({ reverse: on })); };
+  pitchUp = () => this.patchTrack(t => ({ pitch: Math.min(24, t.pitch + 1) }));
+  pitchDown = () => this.patchTrack(t => ({ pitch: Math.max(-24, t.pitch - 1) }));
+  onAlgo = (e) => { const v = e.target.value; this.patchTrack(() => ({ algo: v })); };
+  onLoopMode = (e) => { const v = e.target.value; this.patchTrack(() => ({ loop: v })); };
+  resetStretch = () => this.patchTrack(() => ({ stretch: 1 }));
+
+  onKey = (e) => {
+    const n = +e.currentTarget.dataset.k;
+    clearTimeout(this.kt);
+    this.setState({ key: n });
+    this.kt = setTimeout(() => this.setState({ key: null }), 340);
+  };
+
+  onClip = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const i = +e.currentTarget.dataset.i, mode = e.currentTarget.dataset.mode;
+    const lane = e.currentTarget.closest('[data-lane]');
+    if (!lane) return;
+    const box = lane.getBoundingClientRect();
+    const t0 = this.state.tracks[i];
+    const grab = (e.clientX - box.left) / box.width - t0.off;
+    this.setState({ track: i });
+    const snapV = (v) => this.state.snap ? Math.round(v * 16) / 16 : v;
+    const move = (ev) => {
+      const f = (ev.clientX - box.left) / box.width;
+      const stretchMode = mode === 'l' || mode === 'r' ? (this.state.edgeMode === 'stretch' ? !ev.shiftKey : ev.shiftKey) : false;
+      this.setState(s => ({ tracks: s.tracks.map((t0, n) => {
+        if (n !== i) return t0;
+        const t = this.nt(t0);
+        const len = this.clipLen(t);
+        if (mode === 'move') return Object.assign({}, t, { off: Math.max(0, Math.min(1 - len, snapV(f - grab))) });
+        if (mode === 'fl') return Object.assign({}, t, { fadeIn: Math.max(0, Math.min(1 - t.fadeOut, (f - t.off) / len)) });
+        if (mode === 'fr') return Object.assign({}, t, { fadeOut: Math.max(0, Math.min(1 - t.fadeIn, (t.off + len - f) / len)) });
+        if (mode === 'r') {
+          const newLen = Math.max(0.02, Math.min(1 - t.off, snapV(f) - t.off));
+          if (stretchMode) return Object.assign({}, t, { stretch: Math.max(0.25, Math.min(4, newLen / (t.nat * (t.trimB - t.trimA)))) });
+          const span = newLen / (t.nat * t.stretch);
+          return Object.assign({}, t, { trimB: Math.max(t.trimA + 0.02, Math.min(1, t.trimA + span)) });
+        }
+        const end = t.off + len;
+        const no = Math.max(0, Math.min(end - 0.02, snapV(f)));
+        const newLen = end - no;
+        if (stretchMode) return Object.assign({}, t, { off: no, stretch: Math.max(0.25, Math.min(4, newLen / (t.nat * (t.trimB - t.trimA)))) });
+        const span = newLen / (t.nat * t.stretch);
+        const newA = Math.max(0, Math.min(t.trimB - 0.02, t.trimB - span));
+        return Object.assign({}, t, { trimA: newA, off: end - t.nat * t.stretch * (t.trimB - newA) });
+      }) }));
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
+
+  onHandle = (e) => {
+    e.preventDefault();
+    const side = e.currentTarget.dataset.side;
+    const ref = e.currentTarget.dataset.sheet ? this.sheetWaveRef : this.waveRef;
+    if (!ref.current) return;
+    const box = ref.current.getBoundingClientRect();
+    const move = (ev) => {
+      const f = Math.max(0, Math.min(1, (ev.clientX - box.left) / box.width));
+      this.setState(st => {
+        let [a, b] = st.sel;
+        if (side === 'a') a = Math.min(f, b - 0.02); else b = Math.max(f, a + 0.02);
+        return { sel: [a, b] };
+      });
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
+
+  onTrack = (e) => {
+    e.preventDefault();
+    const el = e.currentTarget, d = el.dataset, box = el.getBoundingClientRect();
+    const set = (ev) => this.apply(d.k, d.i, d.j, Math.max(0, Math.min(1, (ev.clientX - box.left) / box.width)));
+    set(e);
+    const up = () => { window.removeEventListener('pointermove', set); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', set); window.addEventListener('pointerup', up);
+  };
+
+  onKnob = (e) => {
+    e.preventDefault();
+    const k = e.currentTarget.dataset.k, y0 = e.clientY, v0 = this.state.macro[k];
+    const move = (ev) => {
+      const v = Math.max(0, Math.min(1, v0 + (y0 - ev.clientY) / 160));
+      this.setState(s => ({ macro: Object.assign({}, s.macro, { [k]: v }) }));
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
+
+  apply(k, i, j, f) {
+    if (k === 'trackGain') return this.patchTrack(() => ({ gain: f }));
+    if (k === 'trackPan') return this.patchTrack(() => ({ pan: f * 2 - 1 }));
+    if (k === 'trackCents') return this.patchTrack(() => ({ cents: f }));
+    if (k === 'fxParam') {
+      const fi = +i, pj = +j;
+      return this.patchTrack(t => ({ fx: t.fx.map((x, n) => n !== fi ? x : Object.assign({}, x, { params: x.params.map((p, m) => m !== pj ? p : Object.assign({}, p, { v: f })) })) }));
+    }
+    if (k === 'a' || k === 'd' || k === 's' || k === 'r') return this.setState(st => ({ adsr: Object.assign({}, st.adsr, { [k]: f }) }));
+    if (this.state.macro[k] !== undefined) return this.setState(st => ({ macro: Object.assign({}, st.macro, { [k]: f }) }));
+    this.setState({ [k]: f });
+  }
+
+  onTrackBtn = (e) => {
+    e.stopPropagation();
+    const d = e.currentTarget.dataset, idx = +d.i, k = d.k;
+    this.setState(s => ({ tracks: s.tracks.map((t, n) => n !== idx ? t : Object.assign({}, t, { [k]: !t[k] })) }));
+  };
+  addTrack = () => this.setState(s => ({
+    view: 'editor',
+    tracks: s.tracks.concat([{ name: 'Spur ' + (s.tracks.length + 1), clip: 'leer', color: '#6E6B66', soft: '#EFEEEA', shape: 'air', off: 0.02, nat: 0.3, stretch: 1, trimA: 0, trimB: 1, fadeIn: 0.05, fadeOut: 0.1, gain: 0.5, pan: 0, pitch: 0, cents: 0.5, reverse: false, loop: 'One-Shot', algo: 'Transienten-treu', mute: false, solo: false, fx: [] }]),
+    track: s.tracks.length
+  }));
+  bounce = () => this.flash('Zone ' + this.z().name + ' gebounct · ' + this.state.tracks.length + ' Spuren → 1 Sample');
+
+  toggleFxMenu = () => this.setState(s => ({ fxMenu: !s.fxMenu }));
+  addFx = (e) => {
+    const n = e.currentTarget.dataset.k, ext = n === '__ext';
+    const item = ext
+      ? { name: 'FabFilter Pro-Q 4', kind: 'VST3 · extern', on: true, ext: true, params: [{ l: 'MIX', v: 0.5 }] }
+      : { name: n, kind: 'Intern', on: true, params: [{ l: 'MENGE', v: 0.5 }, { l: 'MIX', v: 0.6 }] };
+    this.patchTrack(t => ({ fx: t.fx.concat([item]) }));
+    this.setState({ fxMenu: false });
+    this.flash(ext ? 'Externes Plugin geladen' : n + ' eingefügt');
+  };
+  toggleFx = (e) => { const i = +e.currentTarget.dataset.k; this.patchTrack(t => ({ fx: t.fx.map((x, n) => n !== i ? x : Object.assign({}, x, { on: !x.on })) })); };
+  removeFx = (e) => { const i = +e.currentTarget.dataset.k; this.patchTrack(t => ({ fx: t.fx.filter((x, n) => n !== i) })); };
+  openPlugin = (e) => { const i = +e.currentTarget.dataset.k; this.flash('Plugin-Oberfläche von ' + this.t().fx[i].name + ' geöffnet'); };
+
+  addZone = () => this.setState(s => {
+    const id = 'z' + (s.zones.length + 1) + '_' + Date.now();
+    return { view: 'mapping', zones: s.zones.concat([{ id: id, name: 'Neue Zone', lo: 60, hi: 71, vlo: 0, vhi: 127, root: 64, samples: 0, color: '#6E6B66' }]), zone: id };
+  });
+  toggleTarget = (e) => { const k = e.currentTarget.dataset.k; this.setState(s => ({ targets: Object.assign({}, s.targets, { [k]: !s.targets[k] }) })); };
+  doExport = () => {
+    if (this.state.exporting) return;
+    this.setState({ exporting: true, prog: 0 });
+    clearInterval(this.ivl);
+    this.ivl = setInterval(() => {
+      this.setState(s => {
+        const p = s.prog + 0.07;
+        if (p >= 1) { clearInterval(this.ivl); this.flash('Instrument exportiert'); return { prog: 1, exporting: false }; }
+        return { prog: p };
+      });
+    }, 110);
+  };
+
+  renderVals() {
+    const s = this.state, z = this.z(), tr = this.t(), A = '#7A6CF0';
+    const LO = 24, HI = 96, SPAN = HI - LO;
+    const f2 = (n) => Math.round(n * 100) / 100;
+    const db = (v) => (v <= 0.001 ? '-∞' : (20 * Math.log10(v)).toFixed(1)) + ' dB';
+
+    const menus = this.menuDefs.map(([id, label, items]) => ({
+      id, label, open: s.menu === id,
+      bg: s.menu === id ? '#FBFAF8' : 'transparent',
+      fg: s.menu === id ? '#191817' : '#3A3833',
+      items: items.map(([iid, ilabel, key]) => {
+        const checks = { togglemenu: s.showMenubar, toggleleft: s.showLeft, toggleright: s.showRight, togglevel: s.velLayers, togglesnap: s.snap };
+        return { id: iid, label: ilabel, key: key, sep: iid === '-', isItem: iid !== '-', check: checks[iid] ? '✓' : '' };
+      })
+    }));
+
+    const tabs = [['mapping', 'Mapping'], ['editor', 'Editor'], ['export', 'Export']].map(([id, label]) => ({
+      id, label,
+      bg: s.view === id ? '#FBFAF8' : 'transparent',
+      fg: s.view === id ? '#191817' : '#56534E',
+      bd: s.view === id ? A : 'transparent'
+    }));
+
+    const edgeModes = [['trim', 'Zuschneiden'], ['stretch', 'Stretchen']].map(([id, label]) => ({
+      id, label,
+      bg: s.edgeMode === id ? '#FBFAF8' : 'transparent',
+      fg: s.edgeMode === id ? '#191817' : '#56534E'
+    }));
+
+    const velAxis = s.velLayers;
+    const zoneRects = s.zones.map(zz => {
+      const on = zz.id === s.zone;
+      return {
+        id: zz.id, name: zz.name,
+        left: f2((zz.lo - LO) / SPAN * 100),
+        width: f2((zz.hi - zz.lo + 1) / SPAN * 100),
+        top: velAxis ? f2((127 - zz.vhi) / 127 * 100) : 0,
+        height: velAxis ? f2((zz.vhi - zz.vlo) / 127 * 100) : 100,
+        bg: on ? '#EEEBFE' : '#F3F1ED',
+        bd: on ? A : '#D6D3CD',
+        ring: on ? 'inset 0 0 0 1px ' + A : 'none',
+        showInfo: (zz.hi - zz.lo + 1) / SPAN * 100 >= 17,
+        short: this.noteName(zz.lo) + '–' + this.noteName(zz.hi),
+        info: this.noteName(zz.lo) + '–' + this.noteName(zz.hi) + ' · ' + zz.samples + ' Smp'
+      };
+    });
+
+    const octaveLines = [], gridLines = [];
+    for (let o = 1; o < 6; o++) octaveLines.push({ left: f2(o * 12 / SPAN * 100) });
+    for (let i = 1; i < 8; i++) gridLines.push({ left: f2(i / 8 * 100) });
+
+    const zoneOf = (n) => s.zones.find(zz => n >= zz.lo && n <= zz.hi);
+    const WH = [0, 2, 4, 5, 7, 9, 11], BK = { 1: 1, 3: 2, 6: 4, 8: 5, 10: 6 };
+    const whiteKeys = [], blackKeys = [], wW = 100 / 42;
+    for (let o = 0; o < 6; o++) {
+      for (let i = 0; i < 7; i++) {
+        const note = LO + o * 12 + WH[i];
+        const zo = zoneOf(note), inZ = zo && zo.id === s.zone;
+        whiteKeys.push({ note, label: i === 0 ? this.noteName(note) : '', bg: s.key === note ? A : (inZ ? '#EEEBFE' : '#FDFDFC') });
+      }
+      Object.keys(BK).forEach(k => {
+        const note = LO + o * 12 + (+k);
+        const zo = zoneOf(note), inZ = zo && zo.id === s.zone;
+        blackKeys.push({ note, left: f2((o * 7 + BK[k]) * wW - wW * 0.31), width: f2(wW * 0.62), bg: s.key === note ? A : (inZ ? '#4A4380' : '#26241F') });
+      });
+    }
+
+    const anySolo = s.tracks.some(t => t.solo);
+    const trackRows = s.tracks.map((t0, i) => {
+      const t = this.nt(t0);
+      const audible = !t.mute && (!anySolo || t.solo);
+      const sel = i === s.track;
+      const len = this.clipLen(t);
+      const full = this.wave(i + 11, 120, t.shape);
+      const a = Math.floor(t.trimA * 119), b = Math.max(a + 3, Math.floor(t.trimB * 119));
+      const slice = full.slice(a, b + 1);
+      const bars = (t.reverse ? slice.slice().reverse() : slice).map(h => ({ h: f2(h) }));
+      const lenPct = Math.max(3, len * 100);
+      return {
+        i, name: t.name, color: t.color, clipName: t.clip,
+        rowBg: sel ? '#EFEEEA' : '#E9E7E3',
+        headBg: sel ? '#FBFAF8' : '#F1EFEB',
+        sheetBd: sel ? A : '#E1DED8',
+        clipBg: t.soft, clipRing: sel ? 'inset 0 0 0 1px ' + t.color : 'none',
+        op: audible ? 1 : 0.3,
+        offPct: f2(t.off * 100), lenPct: f2(lenPct), endPct: f2(t.off * 100 + lenPct),
+        fadeInPct: f2(t.fadeIn * 100), fadeOutPct: f2(t.fadeOut * 100),
+        fadeInHandle: f2(t.off * 100 + lenPct * t.fadeIn),
+        fadeOutHandle: f2(t.off * 100 + lenPct * (1 - t.fadeOut)),
+        stretchBadge: t.stretch.toFixed(2) + '×',
+        gainText: db(t.gain),
+        muteBg: t.mute ? '#B4553F' : '#FBFAF8', muteFg: t.mute ? '#FFFFFF' : '#56534E',
+        soloBg: t.solo ? A : '#FBFAF8', soloFg: t.solo ? '#FFFFFF' : '#56534E',
+        bars
+      };
+    });
+
+    const rawFull = this.wave(s.track + 11, 120, tr.shape);
+    const bars = tr.reverse ? rawFull.slice().reverse() : rawFull;
+    const waveBars = bars.map((h, i) => {
+      const t = i / (bars.length - 1);
+      const inTrim = t >= tr.trimA && t <= tr.trimB;
+      const inSel = t >= s.sel[0] && t <= s.sel[1];
+      return { h: f2(h), c: !inTrim ? '#E4E1DB' : (inSel ? A : '#C9C6BF') };
+    });
+
+    const ruler = [];
+    for (let i = 0; i < 8; i++) ruler.push({ label: i + ' s' });
+
+    const fxRows = tr.fx.map((x, i) => ({
+      i, name: x.name, kind: x.kind, isExt: !!x.ext,
+      bg: x.on ? '#FBFAF8' : '#EFEEEA',
+      fg: x.on ? '#191817' : '#56534E',
+      kindFg: x.ext ? '#5546CE' : '#56534E',
+      swBg: x.on ? A : '#DCD9D3', swLeft: x.on ? 14 : 1,
+      params: x.params.map((p, j) => ({ j, l: p.l, pct: f2(p.v * 100), d: Math.round(p.v * 100) + '%', fill: x.on ? A : '#BFBBB3' }))
+    }));
+
+    const tools = [['select', 'Auswahl'], ['trim', 'Zuschneiden'], ['fadein', 'Fade ein'], ['fadeout', 'Fade aus'], ['norm', 'Normalisieren'], ['reverse', 'Umkehren']].map(([id, label]) => {
+      const on = id === 'reverse' ? tr.reverse : s.tool === id;
+      return { id, label, bg: on ? '#EEEBFE' : '#FBFAF8', fg: on ? '#3B2FA8' : '#56534E', bd: on ? A : '#D6D3CD' };
+    });
+
+    const adsr = s.adsr;
+    const eA = adsr.a * 24, eD = adsr.d * 26, eS = (1 - adsr.s) * 88, eSus = 72, eR = Math.min(100, eSus + adsr.r * 28);
+    const envClip = 'polygon(0% 100%, ' + f2(eA) + '% 4%, ' + f2(eA + eD) + '% ' + f2(eS) + '%, ' + eSus + '% ' + f2(eS) + '%, ' + f2(eR) + '% 100%)';
+
+    const q = s.search.trim().toLowerCase();
+    const files = s.files.map((f, i) => ({
+      i, name: f.name, meta: f.meta,
+      bg: i === s.file ? '#EEEBFE' : 'transparent',
+      bars: this.wave(i + 3, 14, f.shape).map(h => ({ h: f2(Math.max(10, h)), c: i === s.file ? A : '#BFBBB3' }))
+    })).filter(f => !q || f.name.toLowerCase().indexOf(q) >= 0);
+
+    const totalSamples = s.zones.reduce((a, b) => a + b.samples, 0);
+    const targets = [
+      ['vst3', 'VST3-Instrument', 'Cubase, Live, Reaper, Studio One', '96 MB'],
+      ['au', 'Audio-Unit-Instrument', 'Logic, GarageBand', '96 MB'],
+      ['standalone', 'Standalone-App', 'Ohne DAW spielbar', '112 MB'],
+      ['pack', 'Projektdatei .sisp', 'Weiterbearbeiten, teilen', '184 MB']
+    ].map(([id, name, note, size]) => ({
+      id, name, note, size,
+      bg: s.targets[id] ? '#EEEBFE' : '#FBFAF8',
+      bd: s.targets[id] ? A : '#D6D3CD',
+      boxBg: s.targets[id] ? A : '#FFFFFF',
+      boxBd: s.targets[id] ? A : '#BFBBB3'
+    }));
+
+    const clipSec = this.clipLen(tr) * 8;
+    return {
+      isStandalone: s.shell === 'standalone', isPlugin: s.shell === 'plugin',
+      vMapping: s.view === 'mapping', vEditor: s.view === 'editor', vExport: s.view === 'export',
+      vBrowser: s.view !== 'editor',
+      showMenubar: s.showMenubar, showLeft: s.showLeft, showRight: s.showRight,
+      menus, onMenu: this.onMenu, onMenuHover: this.onMenuHover, onMenuItem: this.onMenuItem,
+      tabs, setView: this.setView, setShell: this.setShell, goExport: this.goExport, backToMap: this.backToMap,
+      edgeModes, setEdgeMode: this.setEdgeMode,
+      dragHint: s.edgeMode === 'trim' ? 'Kante ziehen schneidet zu · Shift streckt · obere Ecken ziehen Fades' : 'Kante ziehen streckt · Shift schneidet zu · obere Ecken ziehen Fades',
+      togglePlay: this.togglePlay, toggleLoop: this.toggleLoop,
+      playGlyph: s.playing ? '■' : '▶', playBg: s.playing ? A : '#FBFAF8', playFg: s.playing ? '#FFFFFF' : '#56534E',
+      loopBg: s.loopOn ? '#EEEBFE' : '#FBFAF8', loopFg: s.loopOn ? '#3B2FA8' : '#56534E',
+      gainPct: f2(s.gain * 100), gainDb: db(Math.max(0.001, s.gain)),
+      files, openFile: this.openFile, search: s.search, onSearch: this.onSearch,
+      velAxis, zoneRects, octaveLines, gridLines, whiteKeys, blackKeys,
+      selectZone: this.selectZone, openZone: this.openZone, addZone: this.addZone, onKey: this.onKey,
+      trackRows, selectTrack: this.selectTrack, onTrackBtn: this.onTrackBtn, onClip: this.onClip,
+      addTrack: this.addTrack, bounce: this.bounce,
+      snapBg: s.snap ? '#EEEBFE' : '#FBFAF8', snapFg: s.snap ? '#3B2FA8' : '#56534E', snapBd: s.snap ? A : '#C4C0B8',
+      toggleSnap: this.toggleSnap,
+      trName: tr.name, trColor: tr.color, trClipName: tr.clip,
+      trGainPct: f2(tr.gain * 100), trGainText: db(tr.gain),
+      trPanLeft: f2(tr.pan < 0 ? 50 + tr.pan * 50 : 50), trPanWidth: f2(Math.abs(tr.pan) * 50),
+      trPanText: tr.pan === 0 ? 'C' : (tr.pan < 0 ? 'L' : 'R') + Math.round(Math.abs(tr.pan) * 100),
+      trPitchText: (tr.pitch > 0 ? '+' : '') + tr.pitch + ' HT',
+      trCentsPct: f2(tr.cents * 100), trCentsText: (Math.round((tr.cents - 0.5) * 100) > 0 ? '+' : '') + Math.round((tr.cents - 0.5) * 100),
+      trStretchText: tr.stretch.toFixed(2) + '×',
+      trFadeText: (clipSec * tr.fadeIn).toFixed(2) + ' s / ' + (clipSec * tr.fadeOut).toFixed(2) + ' s',
+      trAlgo: tr.algo, trLoop: tr.loop, onAlgo: this.onAlgo, onLoopMode: this.onLoopMode, resetStretch: this.resetStretch,
+      revBg: tr.reverse ? '#EEEBFE' : '#FFFFFF', revFg: tr.reverse ? '#3B2FA8' : '#56534E', revBd: tr.reverse ? A : '#C4C0B8',
+      toggleReverse: this.toggleReverse,
+      fxRows, builtins: this.builtinNames.map(n => ({ name: n })), fxMenu: s.fxMenu,
+      toggleFxMenu: this.toggleFxMenu, addFx: this.addFx, toggleFx: this.toggleFx, removeFx: this.removeFx, openPlugin: this.openPlugin,
+      waveBars, waveRef: this.waveRef, sheetWaveRef: this.sheetWaveRef, ruler, tools, onTool: this.onTool,
+      selLeft: f2(s.sel[0] * 100), selRight: f2(s.sel[1] * 100), selWidth: f2((s.sel[1] - s.sel[0]) * 100),
+      selText: (s.sel[0] * tr.nat * 8).toFixed(2) + ' – ' + (s.sel[1] * tr.nat * 8).toFixed(2) + ' s',
+      phPct: f2(s.ph * 100), phOpacity: s.playing ? 1 : 0,
+      onHandle: this.onHandle, onTrack: this.onTrack, onKnob: this.onKnob,
+      summary: [
+        { label: 'Zonen', value: String(s.zones.length) },
+        { label: 'Samples', value: String(totalSamples) },
+        { label: 'Spuren in Zone', value: String(s.tracks.length) },
+        { label: 'Größe', value: '184 MB' }
+      ],
+      targets, toggleTarget: this.toggleTarget, doExport: this.doExport,
+      exportLabel: s.exporting ? 'Exportiere …' : 'Exportieren',
+      progPct: f2(s.prog * 100), progText: s.prog >= 1 ? 'fertig' : Math.round(s.prog * 100) + ' %',
+      zName: z.name, zColor: z.color, zShort: this.noteName(z.lo) + '–' + this.noteName(z.hi) + ' · Grundton ' + this.noteName(z.root),
+      zoneFields: [
+        { label: 'Grundton', value: this.noteName(z.root) },
+        { label: 'Bereich', value: this.noteName(z.lo) + '–' + this.noteName(z.hi) },
+        { label: 'Velocity', value: z.vlo + '–' + z.vhi },
+        { label: 'Samples', value: String(z.samples) }
+      ],
+      envClip,
+      adsrRows: [
+        { id: 'a', label: 'A', pct: f2(adsr.a * 100), text: Math.round(adsr.a * 2000) + ' ms' },
+        { id: 'd', label: 'D', pct: f2(adsr.d * 100), text: Math.round(adsr.d * 3000) + ' ms' },
+        { id: 's', label: 'S', pct: f2(adsr.s * 100), text: db(adsr.s) },
+        { id: 'r', label: 'R', pct: f2(adsr.r * 100), text: Math.round(adsr.r * 5000) + ' ms' }
+      ],
+      macros: [['m1', 'Filter-Farbe', 'FARBE'], ['m2', 'Attack-Anteil', 'ATTACK'], ['m3', 'Luft / Obertöne', 'LUFT'], ['m4', 'Hall-Anteil', 'HALL']].map(([id, name, short]) => ({
+        id, name, short, pct: f2(s.macro[id] * 100), text: Math.round(s.macro[id] * 100), deg: f2(-140 + s.macro[id] * 280)
+      })),
+      statusLeft: s.key !== null ? 'Note ' + this.noteName(s.key) + ' → ' + ((zoneOf(s.key) && zoneOf(s.key).name) || 'keine Zone') : 'Zone ' + z.name + ' · Spur ' + tr.name,
+      voiceText: (s.playing ? '4' : '0') + ' Stimmen',
+      sheet: s.sheet, openSheet: this.openSheet, closeSheet: this.closeSheet,
+      toast: s.toast
+    };
+  }
+}
+
+</script>
+</body>
+</html>
