@@ -189,8 +189,9 @@ void SamplerVoice::readLayer (LayerState& state, float& left, float& right) cons
     const auto& layer = *state.plan;
     left = right = 0.0f;
 
-    // Ohne Dehnung direkt abspielen - exakt und ohne Nebenwirkungen
-    if (std::abs (layer.stretch - 1.0) < 1.0e-6)
+    /* Laufen Zeit und Tonhöhe gleich schnell (keine Dehnung, kein gehaltenes Tempo), wird
+       direkt abgespielt – exakt und ohne Nebenwirkungen. Sonst trennen die Körner beides. */
+    if (std::abs (state.timeRatio - state.ratio) < 1.0e-9)
     {
         ReadTaps taps;
 
@@ -276,7 +277,11 @@ void SamplerVoice::start (RenderPlan::Ptr plan, const ZonePlan& zone, int midiNo
         const double semitones = fromKey + layer.semitoneOffset;
         const double sampleRateRatio = layer.sample != nullptr ? layer.sample->sourceSampleRate / sampleRate : 1.0;
         state.ratio = std::pow (2.0, semitones / 12.0) * sampleRateRatio;
-        state.timeRatio = state.ratio / juce::jmax (0.25, layer.stretch);
+        /* Wie schnell die Zeit im Sample voranschreitet. Klassisch mit der Tonhöhe; mit
+           gehaltenem Tempo nur mit der Samplerate des Samples – dann erledigen die Körner
+           das Transponieren, und die Dauer bleibt. */
+        const double pace = layer.keepTempo ? sampleRateRatio : state.ratio;
+        state.timeRatio = pace / juce::jmax (0.25, layer.stretch);
 
         /* Ein Abschnitt, der erst später hörbar wird, beginnt gleich dort – das Sample läuft
            innerlich weiter, als hätte es von Anfang an geklungen. */

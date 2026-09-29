@@ -242,7 +242,7 @@ namespace draw
     {
         g.setColour (colours::textSecondary);
         g.setFont (capsFont (size, tracking));
-        g.drawText (text.toUpperCase(), area, justification, true);
+        g.drawText (upperCase (text), area, justification, true);
     }
 
     void disclosure (juce::Graphics& g, juce::Rectangle<int> area, bool open, juce::Colour colour)

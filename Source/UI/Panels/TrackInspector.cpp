@@ -606,7 +606,21 @@ TrackInspectorContent::TrackInspectorContent (StudioContext& c) : ctx (c)
 
     for (auto* c2 : { &gainBar, &panBar, &centsBar, &loopStartBar, &crossfadeBar })
         addAndMakeVisible (c2);
-    for (auto* b : { &pitchDownButton, &pitchUpButton, &resetStretchButton, &reverseButton, &addEffectButton })
+    keepTempoButton.setTooltip ("Aus: höhere Töne laufen schneller, wie bei jedem klassischen Sampler. "
+                                "An: die Dauer bleibt, das Stretch-Verfahren darüber transponiert."_u);
+    keepTempoButton.onClick = [this]
+    {
+        if (auto* t = getTrack())
+        {
+            ctx.step ("Tempo halten umgeschaltet"_u);
+            t->keepTempo = ! t->keepTempo;
+            ctx.model.notifyChanged();
+            ctx.toast (t->keepTempo ? "Transponieren ändert nur die Tonhöhe · Verfahren wirkt jetzt immer"_u
+                                    : "Transponieren wie ein klassischer Sampler: höher = schneller"_u);
+        }
+    };
+
+    for (auto* b : { &pitchDownButton, &pitchUpButton, &resetStretchButton, &reverseButton, &addEffectButton, &keepTempoButton })
         addAndMakeVisible (b);
     addAndMakeVisible (algorithmBox);
     addAndMakeVisible (loopBox);
@@ -663,7 +677,7 @@ void TrackInspectorContent::rebuildIfNeeded()
     const bool hasTrack = getTrack() != nullptr;
     const std::initializer_list<juce::Component*> controls {
         &gainBar, &panBar, &centsBar, &pitchDownButton, &pitchUpButton,
-        &resetStretchButton, &reverseButton, &addEffectButton, &algorithmBox, &loopBox };
+        &resetStretchButton, &reverseButton, &addEffectButton, &algorithmBox, &loopBox, &keepTempoButton };
 
     for (auto* control : controls)
         control->setVisible (hasTrack);
@@ -713,6 +727,12 @@ void TrackInspectorContent::updateValues()
         reverse.text = track->reverse ? colours::accentDark : colours::textSecondary;
         reverse.border = track->reverse ? colours::accent : colours::lineStrongAlt;
         reverseButton.setStyle (reverse);
+
+        FlatButton::Style tempo = reverse;
+        tempo.background = track->keepTempo ? colours::accentSoft : colours::white;
+        tempo.text = track->keepTempo ? colours::accentDark : colours::textSecondary;
+        tempo.border = track->keepTempo ? colours::accent : colours::lineStrongAlt;
+        keepTempoButton.setStyle (tempo);
     }
 
     for (auto& card : effectCards)
@@ -857,7 +877,7 @@ int TrackInspectorContent::getIdealHeight() const
 
     const int loopRows = isLooping() ? 2 * (9 + rowHeight) : 0;
     const int pitchHeight = ctx.ui.showPitchSection
-                                ? pad + sectionTitle + 9 + 26 + 9 + rowHeight + 9 + rowHeight + 9 + 28 + 9 + 28 + pad + loopRows
+                                ? pad + sectionTitle + 9 + 26 + 9 + rowHeight + 9 + rowHeight + 9 + 28 + 9 + 28 + 9 + 28 + pad + loopRows
                                 : pad + sectionTitle + pad;
 
     int effectsHeight = pad + sectionTitle + 9;
@@ -913,12 +933,12 @@ void TrackInspectorContent::resized()
 
     const bool looping = isLooping();
     pitchSection = area.removeFromTop (showPitch
-                                           ? pad + sectionTitle + 9 + 26 + 9 + rowHeight + 9 + rowHeight + 9 + 28 + 9 + 28 + pad + (looping ? 2 * (9 + rowHeight) : 0)
+                                           ? pad + sectionTitle + 9 + 26 + 9 + rowHeight + 9 + rowHeight + 9 + 28 + 9 + 28 + 9 + 28 + pad + (looping ? 2 * (9 + rowHeight) : 0)
                                            : pad + sectionTitle + pad);
 
-    const std::array<juce::Component*, 7> pitchChildren {
+    const std::array<juce::Component*, 8> pitchChildren {
         &pitchDownButton, &pitchUpButton, &centsBar, &resetStretchButton,
-        &reverseButton, &algorithmBox, &loopBox
+        &reverseButton, &algorithmBox, &loopBox, &keepTempoButton
     };
 
     for (auto* child : pitchChildren)
@@ -955,6 +975,10 @@ void TrackInspectorContent::resized()
         r.removeFromTop (9);
 
         algorithmBox.setBounds (r.removeFromTop (28));
+        r.removeFromTop (9);
+
+        // Gehört zum Verfahren darüber: mit gehaltenem Tempo transponiert es
+        keepTempoButton.setBounds (r.removeFromTop (28));
         r.removeFromTop (9);
 
         if (showPitch)

@@ -133,6 +133,7 @@ struct LayerPlan
     double semitoneOffset = 0.0;    // Spur-Tonhöhe in Halbtönen inkl. Cent
     double stretch = 1.0;           // Zeitdehnung; die Tonhöhe bleibt davon unberührt
     double grainSamples = 2048.0;   // Körnung des Überlappungsverfahrens (je nach Algorithmus)
+    bool keepTempo = false;         // Transponieren ändert nur die Tonhöhe, nicht die Dauer
     bool reverse = false;
     LoopMode loop = LoopMode::oneShot;
     double loopStartSamples = 0.0;      // Beginn der Schleife, gezählt ab Beginn des Ausschnitts

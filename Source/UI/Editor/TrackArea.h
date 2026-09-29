@@ -66,6 +66,7 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     bool keyPressed (const juce::KeyPress&) override;
 
@@ -119,6 +120,11 @@ private:
     void removeTracks (int clickedTrack);
     void showTrackMenu (int trackIndex);
 
+    // Umbenennen: ein Textfeld über dem Namen im Spurkopf
+    juce::Rectangle<int> getNameBounds (int trackIndex) const;
+    void startRename (int trackIndex);
+    void finishRename (bool keep);
+
     // Werkzeugleiste
     void openPalette (juce::Point<int>);
     void closePalette();
@@ -147,6 +153,9 @@ private:
     // Schere: wo der Schnitt landen würde
     int hoverRow = -1;
     double hoverTime = -1.0;
+
+    std::unique_ptr<juce::TextEditor> nameEditor;
+    int renamingTrack = -1;
 
     std::unique_ptr<ToolPalette> palette;
     juce::Point<int> paletteOrigin;

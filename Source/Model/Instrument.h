@@ -185,6 +185,14 @@ struct Track
     double loopCrossfade = 0.0;
 
     StretchAlgorithm algorithm = StretchAlgorithm::transientPreserving;
+
+    /** Transponieren ohne Tempowechsel. Aus (wie jeder klassische Sampler): eine Oktave
+        höher heißt doppelt so schnell und halb so lang – so klingt ein Instrument natürlich,
+        weil auch sein Anschlag und sein Vibrato mitgehen. An: die Tonhöhe ändert sich, die
+        Dauer bleibt; dafür arbeitet das Körnerverfahren von `algorithm`, das bei großen
+        Sprüngen hörbar wird (leicht rau, verwaschene Anschläge). */
+    bool keepTempo = false;
+
     bool mute = false;
     bool solo = false;
 

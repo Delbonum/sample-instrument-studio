@@ -54,6 +54,7 @@ namespace
         const juce::Identifier loop           { "loop" };
         const juce::Identifier loopStart      { "loopStart" };
         const juce::Identifier loopCrossfade  { "loopCrossfade" };
+        const juce::Identifier keepTempo      { "keepTempo" };
         const juce::Identifier kitPieces      { "kitPieces" };
         const juce::Identifier algorithm      { "algorithm" };
         const juce::Identifier mute           { "mute" };
@@ -1195,6 +1196,7 @@ juce::ValueTree InstrumentModel::toValueTree() const
             tn.setProperty (id::loop, (int) t.loop, nullptr);
             tn.setProperty (id::loopStart, t.loopStart, nullptr);
             tn.setProperty (id::loopCrossfade, t.loopCrossfade, nullptr);
+            tn.setProperty (id::keepTempo, t.keepTempo, nullptr);
             tn.setProperty (id::algorithm, (int) t.algorithm, nullptr);
             tn.setProperty (id::mute, t.mute, nullptr);
             tn.setProperty (id::solo, t.solo, nullptr);
@@ -1407,6 +1409,7 @@ bool InstrumentModel::fromValueTree (const juce::ValueTree& root, juce::AudioFor
                 t.loop = readEnum (tn, id::loop, LoopMode::oneShot, 3);
                 t.loopStart = juce::jlimit (0.0, 0.9, (double) tn.getProperty (id::loopStart, 0.0));
                 t.loopCrossfade = juce::jlimit (0.0, 0.5, (double) tn.getProperty (id::loopCrossfade, 0.0));
+                t.keepTempo = tn.getProperty (id::keepTempo, false);
                 t.algorithm = readEnum (tn, id::algorithm, StretchAlgorithm::transientPreserving, 4);
                 t.mute = tn.getProperty (id::mute, false);
                 t.solo = tn.getProperty (id::solo, false);

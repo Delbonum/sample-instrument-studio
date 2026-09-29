@@ -602,6 +602,7 @@ RenderPlan::Ptr buildRenderPlan (const InstrumentModel& model, const SampleCache
                                                            track.loopCrossfade * loopLength);
                 layer.stretch = juce::jlimit (0.25, 4.0, clip.stretch);
                 layer.grainSamples = grainSizeFor (track.algorithm);
+                layer.keepTempo = track.keepTempo;
                 layer.semitoneOffset = (double) track.pitch + ((double) track.cents - 0.5);
 
                 // Panorama mit 0 dB in der Mitte: der angezeigte Spurpegel ist auch der gehörte,

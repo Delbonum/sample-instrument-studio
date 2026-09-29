@@ -72,6 +72,7 @@ private:
     ValueBar gainBar, panBar, centsBar, loopStartBar, crossfadeBar;
     FlatButton pitchDownButton { "–"_u }, pitchUpButton { "+" };
     FlatButton resetStretchButton { "1:1" }, reverseButton { "Umkehren" }, addEffectButton { "+" };
+    FlatButton keepTempoButton { "Tempo beim Transponieren halten" };
     juce::ComboBox algorithmBox, loopBox;
     std::vector<std::unique_ptr<EffectCard>> effectCards;
 

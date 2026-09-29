@@ -149,6 +149,14 @@ juce::Rectangle<int> TrackArea::getMuteBounds (int index) const
     return { head.getX(), head.getBottom() - 18, 21, 18 };
 }
 
+juce::Rectangle<int> TrackArea::getNameBounds (int index) const
+{
+    // Wie in paint: Innenfläche des Kopfes, erste Zeile, hinter dem Farbquadrat
+    auto title = getRowBounds (index).withWidth (headerWidth).reduced (9, 8).removeFromTop (16);
+    title.removeFromLeft (8 + 6);
+    return title;
+}
+
 juce::Rectangle<int> TrackArea::getSoloBounds (int index) const
 {
     return getMuteBounds (index).translated (21 + 5, 0);
@@ -463,9 +471,12 @@ void TrackArea::paint (juce::Graphics& g)
         g.setColour (track.colour);
         g.fillRect (titleRow.removeFromLeft (8).withSizeKeepingCentre (8, 8));
         titleRow.removeFromLeft (6);
-        g.setColour (colours::text);
-        g.setFont (sansFont (11.5f, Weight::medium));
-        g.drawText (trackLabel (track, i), titleRow, juce::Justification::centredLeft, true);
+        if (i != renamingTrack)
+        {
+            g.setColour (colours::text);
+            g.setFont (sansFont (11.5f, Weight::medium));
+            g.drawText (trackLabel (track, i), titleRow, juce::Justification::centredLeft, true);
+        }
 
         const auto mute = getMuteBounds (i);
         const auto solo = getSoloBounds (i);
@@ -781,6 +792,83 @@ void TrackArea::mouseUp (const juce::MouseEvent& e)
     dragTrack = -1;
     dragClip = 0;
     moveOrigins.clear();
+}
+
+void TrackArea::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    // Doppelklick in den Spurkopf (nicht auf Stumm/Solo) benennt die Spur um
+    const int row = rowAt (e.getPosition());
+
+    if (row < 0 || e.x >= headerWidth || getMuteBounds (row).contains (e.getPosition())
+        || getSoloBounds (row).contains (e.getPosition()))
+        return;
+
+    startRename (row);
+}
+
+void TrackArea::startRename (int trackIndex)
+{
+    auto* zone = getZone();
+
+    if (zone == nullptr || ! juce::isPositiveAndBelow (trackIndex, (int) zone->tracks.size()))
+        return;
+
+    finishRename (true);
+
+    renamingTrack = trackIndex;
+    nameEditor = std::make_unique<juce::TextEditor>();
+    nameEditor->setFont (sansFont (11.5f, Weight::medium));
+    nameEditor->setIndents (3, 0);
+    nameEditor->setJustification (juce::Justification::centredLeft);
+    nameEditor->setText (zone->tracks[(size_t) trackIndex].name, false);
+    nameEditor->setBounds (getNameBounds (trackIndex).expanded (3, 3));
+
+    /* Übernehmen und Abbrechen erst nach der Tastenbehandlung: das Textfeld darf sich nicht
+       in seinem eigenen Rückruf abbauen. */
+    juce::Component::SafePointer<TrackArea> safe (this);
+    const auto later = [safe] (bool keep)
+    {
+        juce::MessageManager::callAsync ([safe, keep] { if (safe != nullptr) safe->finishRename (keep); });
+    };
+
+    nameEditor->onReturnKey = [later] { later (true); };
+    nameEditor->onEscapeKey = [later] { later (false); };
+    nameEditor->onFocusLost = [later] { later (true); };
+
+    addAndMakeVisible (*nameEditor);
+    nameEditor->selectAll();
+    nameEditor->grabKeyboardFocus();
+    repaint();
+}
+
+void TrackArea::finishRename (bool keep)
+{
+    if (nameEditor == nullptr)
+        return;
+
+    const auto text = nameEditor->getText().trim();
+    const int index = renamingTrack;
+
+    // Erst abbauen: das Umbenennen meldet eine Änderung, und die zeichnet neu
+    removeChildComponent (nameEditor.get());
+    nameEditor.reset();
+    renamingTrack = -1;
+
+    auto* zone = getZone();
+
+    if (keep && zone != nullptr && juce::isPositiveAndBelow (index, (int) zone->tracks.size())
+        && text.isNotEmpty() && text != zone->tracks[(size_t) index].name)
+    {
+        ctx.step ("Spur umbenannt");
+        zone->tracks[(size_t) index].name = text;
+        ctx.model.notifyChanged();
+    }
+
+    repaint();
+
+    // Nach Enter oder Esc gehören die Tasten wieder den Spuren – nach einem Klick woandershin nicht
+    if (juce::Component::getCurrentlyFocusedComponent() == nullptr)
+        grabKeyboardFocus();
 }
 
 void TrackArea::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel)
@@ -1511,6 +1599,7 @@ void TrackArea::changeListenerCallback (juce::ChangeBroadcaster*)
     if (zoneId != shownZoneId)
     {
         shownZoneId = zoneId;
+        finishRename (false);
         ctx.ui.selectedClips.clear();
         ctx.ui.selectedTracks.clear();
     }

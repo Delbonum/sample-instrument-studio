@@ -1,5 +1,6 @@
 #include "StudioLookAndFeel.h"
 #include "Theme.h"
+#include "../Model/Text.h"
 
 namespace sis
 {
@@ -177,7 +178,7 @@ void StudioLookAndFeel::drawPopupMenuSectionHeaderWithOptions (juce::Graphics& g
        in einer Farbe, die dieses Aussehen nie setzt. */
     g.setColour (colours::textTertiary);
     g.setFont (monoFont (10.0f, Weight::medium));
-    g.drawText (sectionName.toUpperCase(), area.reduced (menuPadX, 0).withTrimmedTop (4),
+    g.drawText (upperCase (sectionName), area.reduced (menuPadX, 0).withTrimmedTop (4),
                 juce::Justification::centredLeft, true);
 }
 

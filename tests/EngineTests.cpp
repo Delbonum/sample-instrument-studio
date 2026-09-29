@@ -2753,6 +2753,58 @@ int main()
         expect ("Und nichts vor dem Zuschnitt", lowest > 0.2f);
     }
 
+    // --- Transponieren mit gehaltenem Tempo -------------------------------------------
+    {
+        sis::SampleCache cache;
+        cache.insert (makeSineSample ("sine.wav", 24000, 500.0));   // 0,5 s, 500 Hz
+
+        auto classic = makeTrack ("sine.wav");
+        classic.loop = sis::LoopMode::oneShot;
+
+        auto held = classic;
+        held.keepTempo = true;
+
+        auto classicModel = makeModel ({ classic });
+        auto heldModel = makeModel ({ held });
+
+        auto classicRoot = makeEngine (*classicModel, cache);
+        const auto rootOut = render (*classicRoot, 36000, 60, 1.0f);
+        auto classicUp = makeEngine (*classicModel, cache);
+        const auto classicOctave = render (*classicUp, 36000, 72, 1.0f);
+        auto heldUp = makeEngine (*heldModel, cache);
+        const auto heldOctave = render (*heldUp, 36000, 72, 1.0f);
+
+        const int rootEnd = rootOut.lastSoundingSample();
+        const int classicEnd = classicOctave.lastSoundingSample();
+        const int heldEnd = heldOctave.lastSoundingSample();
+
+        // Klassisch: eine Oktave höher ist halb so lang
+        expect ("Klassisch halbiert die Oktave die Dauer", std::abs (classicEnd - rootEnd / 2) < 600);
+
+        // Mit gehaltenem Tempo: gleich lang wie am Grundton ...
+        expect ("Mit gehaltenem Tempo bleibt die Dauer", std::abs (heldEnd - rootEnd) < 2400);
+
+        // ... und trotzdem eine Oktave höher
+        const int window = 9600;
+        const double rootCrossings = rootOut.zeroCrossings (4800, window);
+        const double heldCrossings = heldOctave.zeroCrossings (4800, window);
+        expectNear ("Mit gehaltenem Tempo trotzdem eine Oktave höher", heldCrossings / rootCrossings, 2.0, 0.1);
+
+        // Am Grundton ändert der Schalter nichts: dort wird weiter direkt gelesen
+        auto heldRoot = makeEngine (*heldModel, cache);
+        const auto heldRootOut = render (*heldRoot, 4800, 60, 1.0f);
+        float largest = 0.0f;
+        for (int i = 0; i < 4800; ++i)
+            largest = juce::jmax (largest, std::abs (heldRootOut.at (i) - rootOut.at (i)));
+        expect ("Am Grundton klingt es mit und ohne Schalter gleich", largest < 1.0e-5f);
+
+        // Speichern und Laden
+        juce::AudioFormatManager formats;
+        sis::InstrumentModel loaded;
+        loaded.fromValueTree (heldModel->toValueTree(), formats);
+        expect ("Der Schalter übersteht das Speichern", loaded.zones.front().tracks.front().keepTempo);
+    }
+
     std::printf ("%d Prüfungen, %d Fehler\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

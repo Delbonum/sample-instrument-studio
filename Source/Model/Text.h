@@ -11,6 +11,16 @@ inline juce::String operator""_u (const char* text, size_t length)
     return juce::String::fromUTF8 (text, (int) length);
 }
 
+/** Großbuchstaben, auch für Umlaute. juce::String::toUpperCase lässt sie unter Windows
+    klein („TONHöHE“): die Laufzeitbibliothek kennt im Standard-Locale nur ASCII. */
+inline juce::String upperCase (const juce::String& text)
+{
+    return text.toUpperCase()
+               .replace (juce::String::fromUTF8 ("ä"), juce::String::fromUTF8 ("Ä"))
+               .replace (juce::String::fromUTF8 ("ö"), juce::String::fromUTF8 ("Ö"))
+               .replace (juce::String::fromUTF8 ("ü"), juce::String::fromUTF8 ("Ü"));
+}
+
 /** Notenname wie im Prototyp: 36 → "C2", 54 → "F#3". */
 inline juce::String noteName (int midiNote)
 {
