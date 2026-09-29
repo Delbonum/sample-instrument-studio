@@ -1,6 +1,7 @@
 #include "Instrument.h"
 
 #include <algorithm>
+#include <atomic>
 #include <set>
 
 namespace sis
@@ -13,6 +14,7 @@ namespace
         const juce::Identifier instrument { "Instrument" };
         const juce::Identifier zone       { "Zone" };
         const juce::Identifier track      { "Track" };
+        const juce::Identifier clipNode   { "Clip" };
         const juce::Identifier effect     { "Effect" };
         const juce::Identifier parameter  { "Parameter" };
         const juce::Identifier sample     { "Sample" };
@@ -136,14 +138,17 @@ namespace
         Track t;
         const auto& c = trackPalette()[(size_t) paletteIndex];
         t.name = name;
-        t.clip = clip;
         t.colour = c.main;
         t.softColour = c.soft;
-        t.shape = shape;
-        t.natural = naturalSeconds / InstrumentModel::timelineSeconds;
-        t.fadeIn = 0.04;
-        t.fadeOut = 0.12;
         t.gain = 0.6f;
+
+        Clip piece;
+        piece.sample = clip;
+        piece.shape = shape;
+        piece.natural = naturalSeconds / InstrumentModel::timelineSeconds;
+        piece.fadeIn = 0.04;
+        piece.fadeOut = 0.12;
+        t.clips.push_back (piece);
         return t;
     }
 
@@ -527,11 +532,12 @@ juce::String Effect::kindLabel() const
 //==============================================================================
 int Zone::numSamples() const
 {
-    std::set<juce::String> clips;
+    std::set<juce::String> names;
     for (const auto& t : tracks)
-        if (t.clip.isNotEmpty() && t.clip != "leer")
-            clips.insert (t.clip);
-    return (int) clips.size();
+        for (const auto& c : t.clips)
+            if (c.hasSample())
+                names.insert (c.sample);
+    return (int) names.size();
 }
 
 double Zone::contentEnd() const
@@ -539,37 +545,78 @@ double Zone::contentEnd() const
     double end = 0.0;
 
     for (const auto& t : tracks)
-        if (t.hasClip())
-            end = juce::jmax (end, t.offset + t.clipLength());
+        end = juce::jmax (end, t.end());
 
     return end;
 }
 
-void Track::placeSample (const SampleFile& sample, double newOffset)
+int Zone::trackOfClip (juce::uint32 uid) const
 {
-    /* Der Name folgt dem Sample, solange ihn niemand selbst vergeben hat – eine Spur,
-       die „Spur 2“ oder wie ihr altes Sample heißt, soll nicht falsch beschriftet bleiben. */
-    const auto baseName = [] (const juce::String& fileName)
-    {
-        return fileName.containsChar ('.') ? fileName.upToLastOccurrenceOf (".", false, false) : fileName;
-    };
+    for (int i = 0; i < (int) tracks.size(); ++i)
+        if (tracks[(size_t) i].findClip (uid) != nullptr)
+            return i;
 
+    return -1;
+}
+
+juce::uint32 Clip::nextUid() noexcept
+{
+    static std::atomic<juce::uint32> counter { 0 };
+    return ++counter;
+}
+
+Clip Clip::fromSample (const SampleFile& file, double offset)
+{
+    Clip c;
+    c.sample = file.name;
+    c.shape = file.shape;
+    c.natural = juce::jmax (0.01, file.lengthSeconds / InstrumentModel::timelineSeconds);
+    c.offset = juce::jmax (0.0, offset);
+    return c;
+}
+
+bool Track::hasClips() const
+{
+    return std::any_of (clips.begin(), clips.end(), [] (const Clip& c) { return c.hasSample(); });
+}
+
+Clip* Track::findClip (juce::uint32 uid)
+{
+    for (auto& c : clips)
+        if (c.uid == uid)
+            return &c;
+
+    return nullptr;
+}
+
+const Clip* Track::findClip (juce::uint32 uid) const
+{
+    return const_cast<Track*> (this)->findClip (uid);
+}
+
+double Track::end() const
+{
+    double result = 0.0;
+
+    for (const auto& c : clips)
+        if (c.hasSample())
+            result = juce::jmax (result, c.end());
+
+    return result;
+}
+
+Clip& Track::addSample (const SampleFile& sample, double offset)
+{
+    /* Der Name folgt dem ersten Sample, solange ihn niemand selbst vergeben hat – eine
+       Spur soll nicht „Spur 2“ heißen, wenn doch klar ist, was darauf liegt. */
     const bool generatedName = name.isEmpty() || name == "Spur"
-                            || (name.startsWith ("Spur ") && name.substring (5).containsOnly ("0123456789"))
-                            || (hasClip() && name == baseName (clip));
+                            || (name.startsWith ("Spur ") && name.substring (5).containsOnly ("0123456789"));
 
-    if (generatedName)
-        name = baseName (sample.name);
+    if (generatedName && ! hasClips())
+        name = sample.name.containsChar ('.') ? sample.name.upToLastOccurrenceOf (".", false, false) : sample.name;
 
-    clip = sample.name;
-    shape = sample.shape;
-    natural = juce::jmax (0.01, sample.lengthSeconds / InstrumentModel::timelineSeconds);
-    offset = juce::jmax (0.0, newOffset);
-    stretch = 1.0;
-    trimStart = 0.0;
-    trimEnd = 1.0;
-    fadeIn = 0.0;
-    fadeOut = 0.0;
+    clips.push_back (Clip::fromSample (sample, offset));
+    return clips.back();
 }
 
 Track* Zone::getSelectedTrack()
@@ -686,13 +733,13 @@ const SampleFile* InstrumentModel::findSample (const juce::String& fileName) con
     return nullptr;
 }
 
-std::vector<float> InstrumentModel::waveformFor (const Track& track, int trackIndex) const
+std::vector<float> InstrumentModel::waveformFor (const Clip& clip, int seed) const
 {
-    if (const auto* sample = findSample (track.clip))
+    if (const auto* sample = findSample (clip.sample))
         if (! sample->peaks.empty())
             return sample->peaks;
 
-    return demoWaveform (trackIndex + 11, SampleFile::peakResolution, track.shape);
+    return demoWaveform (seed + 11, SampleFile::peakResolution, clip.shape);
 }
 
 const Zone* InstrumentModel::findZoneForNote (int note, int velocity) const
@@ -856,7 +903,7 @@ void InstrumentModel::removeTrack (Zone& zone, int trackIndex)
 int InstrumentModel::addSampleTrack (Zone& zone, const SampleFile& sample)
 {
     auto target = std::find_if (zone.tracks.begin(), zone.tracks.end(),
-                                [] (const Track& t) { return ! t.hasClip(); });
+                                [] (const Track& t) { return ! t.hasClips(); });
 
     if (target == zone.tracks.end())
     {
@@ -871,7 +918,8 @@ int InstrumentModel::addSampleTrack (Zone& zone, const SampleFile& sample)
         target = zone.tracks.end() - 1;
     }
 
-    target->placeSample (sample, 0.0);
+    target->clips.clear();   // höchstens Überreste ohne Sample
+    target->addSample (sample, 0.0);
     zone.selectedTrack = (int) (target - zone.tracks.begin());
     notifyChanged();
     return zone.selectedTrack;
@@ -1037,24 +1085,24 @@ void InstrumentModel::loadDemo()
     sub.colour = trackPalette()[0].main;
     {
         Track t = makeTrack ("Sub Sustain", "sub_bow_C1_sustain.wav", 0, WaveShape::sustain, 0.53 * timelineSeconds);
-        t.offset = 0.0; t.gain = 0.82f; t.pan = 0.0f; t.pitch = -2; t.loop = LoopMode::sustainLoop;
-        t.fadeIn = 0.03; t.fadeOut = 0.18;
+        t.clips[0].offset = 0.0; t.gain = 0.82f; t.pan = 0.0f; t.pitch = -2; t.loop = LoopMode::sustainLoop;
+        t.clips[0].fadeIn = 0.03; t.clips[0].fadeOut = 0.18;
         t.effects = { makeEffect ("Kanalfilter", false, { { "CUTOFF", 0.62f }, { "RESO", 0.28f } }),
                       makeEffect ("Sättigung"_u, false, { { "DRIVE", 0.41f }, { "MIX", 0.7f } }) };
         sub.tracks.push_back (t);
     }
     {
         Track t = makeTrack ("Attack Klick", "attack_klick_A.wav", 2, WaveShape::attack, 0.09 * timelineSeconds);
-        t.offset = 0.01; t.gain = 0.54f; t.pan = -0.18f; t.pitch = 0; t.loop = LoopMode::oneShot;
-        t.fadeIn = 0.0; t.fadeOut = 0.22;
+        t.clips[0].offset = 0.01; t.gain = 0.54f; t.pan = -0.18f; t.pitch = 0; t.loop = LoopMode::oneShot;
+        t.clips[0].fadeIn = 0.0; t.clips[0].fadeOut = 0.22;
         t.effects = { makeEffect ("Transienten", false, { { "ATTACK", 0.66f } }) };
         sub.tracks.push_back (t);
     }
     {
         Track t = makeTrack ("Luft / Obertöne"_u, "luft_obertoene.wav", 1, WaveShape::air, 0.33 * timelineSeconds);
-        t.offset = 0.06; t.stretch = 1.28; t.gain = 0.36f; t.pan = 0.22f; t.pitch = 12;
+        t.clips[0].offset = 0.06; t.clips[0].stretch = 1.28; t.gain = 0.36f; t.pan = 0.22f; t.pitch = 12;
         t.loop = LoopMode::sustainLoop; t.algorithm = StretchAlgorithm::smooth;
-        t.fadeIn = 0.14; t.fadeOut = 0.2;
+        t.clips[0].fadeIn = 0.14; t.clips[0].fadeOut = 0.2;
         t.effects = { makeEffect ("ValhallaVintage", true, { { "GRÖSSE"_u, 0.55f }, { "MIX", 0.24f } }) };
         sub.tracks.push_back (t);
     }
@@ -1137,17 +1185,8 @@ juce::ValueTree InstrumentModel::toValueTree() const
         {
             juce::ValueTree tn (id::track);
             tn.setProperty (id::name, t.name, nullptr);
-            tn.setProperty (id::clip, t.clip, nullptr);
             tn.setProperty (id::colour, t.colour.toString(), nullptr);
             tn.setProperty (id::softColour, t.softColour.toString(), nullptr);
-            tn.setProperty (id::shape, (int) t.shape, nullptr);
-            tn.setProperty (id::offset, t.offset, nullptr);
-            tn.setProperty (id::natural, t.natural, nullptr);
-            tn.setProperty (id::stretch, t.stretch, nullptr);
-            tn.setProperty (id::trimStart, t.trimStart, nullptr);
-            tn.setProperty (id::trimEnd, t.trimEnd, nullptr);
-            tn.setProperty (id::fadeIn, t.fadeIn, nullptr);
-            tn.setProperty (id::fadeOut, t.fadeOut, nullptr);
             tn.setProperty (id::gain, t.gain, nullptr);
             tn.setProperty (id::pan, t.pan, nullptr);
             tn.setProperty (id::pitch, t.pitch, nullptr);
@@ -1159,6 +1198,21 @@ juce::ValueTree InstrumentModel::toValueTree() const
             tn.setProperty (id::algorithm, (int) t.algorithm, nullptr);
             tn.setProperty (id::mute, t.mute, nullptr);
             tn.setProperty (id::solo, t.solo, nullptr);
+
+            for (const auto& c : t.clips)
+            {
+                juce::ValueTree cn (id::clipNode);
+                cn.setProperty (id::clip, c.sample, nullptr);
+                cn.setProperty (id::shape, (int) c.shape, nullptr);
+                cn.setProperty (id::offset, c.offset, nullptr);
+                cn.setProperty (id::natural, c.natural, nullptr);
+                cn.setProperty (id::stretch, c.stretch, nullptr);
+                cn.setProperty (id::trimStart, c.trimStart, nullptr);
+                cn.setProperty (id::trimEnd, c.trimEnd, nullptr);
+                cn.setProperty (id::fadeIn, c.fadeIn, nullptr);
+                cn.setProperty (id::fadeOut, c.fadeOut, nullptr);
+                tn.appendChild (cn, nullptr);
+            }
 
             for (const auto& e : t.effects)
             {
@@ -1314,17 +1368,37 @@ bool InstrumentModel::fromValueTree (const juce::ValueTree& root, juce::AudioFor
 
                 Track t;
                 t.name = tn.getProperty (id::name, "Spur").toString();
-                t.clip = tn.getProperty (id::clip, "leer").toString();
                 t.colour = readColour (tn, id::colour, t.colour);
                 t.softColour = readColour (tn, id::softColour, t.softColour);
-                t.shape = readEnum (tn, id::shape, WaveShape::air, 4);
-                t.offset = tn.getProperty (id::offset, t.offset);
-                t.natural = tn.getProperty (id::natural, t.natural);
-                t.stretch = juce::jlimit (0.25, 4.0, (double) tn.getProperty (id::stretch, t.stretch));
-                t.trimStart = tn.getProperty (id::trimStart, t.trimStart);
-                t.trimEnd = tn.getProperty (id::trimEnd, t.trimEnd);
-                t.fadeIn = tn.getProperty (id::fadeIn, t.fadeIn);
-                t.fadeOut = tn.getProperty (id::fadeOut, t.fadeOut);
+
+                const auto readClip = [] (const juce::ValueTree& node)
+                {
+                    Clip c;
+                    c.sample = node.getProperty (id::clip).toString();
+                    c.shape = readEnum (node, id::shape, WaveShape::air, 4);
+                    c.offset = node.getProperty (id::offset, c.offset);
+                    c.natural = node.getProperty (id::natural, c.natural);
+                    c.stretch = juce::jlimit (0.25, 4.0, (double) node.getProperty (id::stretch, c.stretch));
+                    c.trimStart = node.getProperty (id::trimStart, c.trimStart);
+                    c.trimEnd = node.getProperty (id::trimEnd, c.trimEnd);
+                    c.fadeIn = node.getProperty (id::fadeIn, c.fadeIn);
+                    c.fadeOut = node.getProperty (id::fadeOut, c.fadeOut);
+                    return c;
+                };
+
+                for (const auto& cn : tn)
+                    if (cn.hasType (id::clipNode))
+                        t.clips.push_back (readClip (cn));
+
+                /* Dateien bis 1.11 kennen nur einen Clip je Spur, und der steht in der
+                   Spur selbst. */
+                if (! tn.getChildWithName (id::clipNode).isValid() && tn.hasProperty (id::clip))
+                {
+                    auto legacy = readClip (tn);
+
+                    if (legacy.hasSample())
+                        t.clips.push_back (legacy);
+                }
                 t.gain = tn.getProperty (id::gain, t.gain);
                 t.pan = tn.getProperty (id::pan, t.pan);
                 t.pitch = juce::jlimit (-24, 24, (int) tn.getProperty (id::pitch, t.pitch));

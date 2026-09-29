@@ -14,6 +14,49 @@ namespace
     constexpr int fadeHandleSize = 11;
     constexpr int fadeHandleTop = 19;
     constexpr int dropStripHeight = 44; // Platz unter der letzten Spur: dort entsteht eine neue
+
+    // In der Reihenfolge der Werkzeugleiste
+    constexpr EditTool paletteTools[] = { EditTool::select, EditTool::erase, EditTool::split };
+
+    geometry::ClipState toState (const Clip& c)
+    {
+        return { c.offset, c.natural, c.stretch, c.trimStart, c.trimEnd, c.fadeIn, c.fadeOut };
+    }
+
+    void applyState (Clip& c, const geometry::ClipState& s)
+    {
+        c.offset = s.offset;
+        c.stretch = s.stretch;
+        c.trimStart = s.trimStart;
+        c.trimEnd = s.trimEnd;
+        c.fadeIn = s.fadeIn;
+        c.fadeOut = s.fadeOut;
+    }
+
+    juce::String trackLabel (const Track& track, int index)
+    {
+        return track.name.isNotEmpty() ? track.name : "Spur " + juce::String (index + 1);
+    }
+
+    juce::String countText (int count, const char* one, const char* many)
+    {
+        return count == 1 ? "1 " + juce::String::fromUTF8 (one)
+                          : juce::String (count) + " " + juce::String::fromUTF8 (many);
+    }
+
+    /** Neue, leere Spur unten an der Zone – beim Einfügen, Ziehen und Hineinziehen. */
+    Track& appendTrack (Zone& zone)
+    {
+        const auto& colours = trackPalette()[zone.tracks.size() % trackPalette().size()];
+
+        Track track;
+        track.name = "Spur " + juce::String ((int) zone.tracks.size() + 1);
+        track.colour = colours.main;
+        track.softColour = colours.soft;
+        track.gain = 0.8f;
+        zone.tracks.push_back (std::move (track));
+        return zone.tracks.back();
+    }
 }
 
 TrackArea::TrackArea (StudioContext& c) : ctx (c)
@@ -25,6 +68,7 @@ TrackArea::TrackArea (StudioContext& c) : ctx (c)
 
 TrackArea::~TrackArea()
 {
+    closePalette();
     ctx.model.removeChangeListener (this);
     ctx.ui.removeChangeListener (this);
 }
@@ -76,21 +120,26 @@ juce::Rectangle<int> TrackArea::getLaneBounds (int index) const
     return getRowBounds (index).withTrimmedLeft (headerWidth);
 }
 
-juce::Rectangle<float> TrackArea::getClipBounds (int index) const
+juce::Rectangle<float> TrackArea::getClipBounds (int trackIndex, int clipIndex) const
 {
     const auto* zone = getZone();
-    if (zone == nullptr || ! juce::isPositiveAndBelow (index, (int) zone->tracks.size()))
+    if (zone == nullptr || ! juce::isPositiveAndBelow (trackIndex, (int) zone->tracks.size()))
         return {};
 
-    const auto& track = zone->tracks[(size_t) index];
+    const auto& track = zone->tracks[(size_t) trackIndex];
 
-    if (! track.hasClip())
+    if (! juce::isPositiveAndBelow (clipIndex, (int) track.clips.size()))
         return {};
 
-    const auto lane = getLaneBounds (index).toFloat();
-    const auto length = juce::jmax (0.005, track.clipLength());
+    const auto& clip = track.clips[(size_t) clipIndex];
 
-    return { timeToX (track.offset), lane.getY() + (float) clipInset,
+    if (! clip.hasSample())
+        return {};
+
+    const auto lane = getLaneBounds (trackIndex).toFloat();
+    const auto length = juce::jmax (0.005, clip.length());
+
+    return { timeToX (clip.offset), lane.getY() + (float) clipInset,
              (float) length * laneWidth(), lane.getHeight() - 2.0f * (float) clipInset };
 }
 
@@ -108,7 +157,7 @@ juce::Rectangle<int> TrackArea::getSoloBounds (int index) const
 int TrackArea::rowAt (juce::Point<int> p) const
 {
     const auto* zone = getZone();
-    if (zone == nullptr)
+    if (zone == nullptr || p.y < 0)
         return -1;
 
     const int row = p.y / (rowHeight + 1);
@@ -126,45 +175,197 @@ bool TrackArea::isStretching (const juce::MouseEvent& e) const
     return (ctx.ui.edgeMode == EdgeMode::stretch) != shift;
 }
 
-TrackArea::Drag TrackArea::dragModeAt (int trackIndex, juce::Point<int> p) const
+TrackArea::Hit TrackArea::hitAt (int trackIndex, juce::Point<int> p) const
 {
-    const auto clip = getClipBounds (trackIndex);
-    if (clip.isEmpty() || p.x < headerWidth)
-        return Drag::none;
-
     const auto* zone = getZone();
+
+    if (zone == nullptr || p.x < headerWidth || ! juce::isPositiveAndBelow (trackIndex, (int) zone->tracks.size()))
+        return {};
+
     const auto& track = zone->tracks[(size_t) trackIndex];
     const auto row = getRowBounds (trackIndex);
-    const float y = (float) p.y;
     const float x = (float) p.x;
+    const float y = (float) p.y;
 
-    // Fade-Ecken oben
-    const float handleTop = (float) (row.getY() + fadeHandleTop);
-    if (y >= handleTop && y <= handleTop + (float) fadeHandleSize)
+    // Von oben nach unten im Stapel: der oberste Clip fängt den Klick
+    for (int c = (int) track.clips.size(); --c >= 0;)
     {
-        const float fadeInX = clip.getX() + (float) track.fadeIn * clip.getWidth();
-        const float fadeOutX = clip.getRight() - (float) track.fadeOut * clip.getWidth();
+        const auto clip = getClipBounds (trackIndex, c);
 
-        if (std::abs (x - fadeInX) <= fadeHandleSize * 0.5f + 1.0f)
-            return Drag::fadeIn;
-        if (std::abs (x - fadeOutX) <= fadeHandleSize * 0.5f + 1.0f)
-            return Drag::fadeOut;
+        if (clip.isEmpty())
+            continue;
+
+        const auto& data = track.clips[(size_t) c];
+
+        // Fade-Ecken oben
+        const float handleTop = (float) (row.getY() + fadeHandleTop);
+        if (y >= handleTop && y <= handleTop + (float) fadeHandleSize)
+        {
+            const float fadeInX = clip.getX() + (float) data.fadeIn * clip.getWidth();
+            const float fadeOutX = clip.getRight() - (float) data.fadeOut * clip.getWidth();
+
+            if (std::abs (x - fadeInX) <= fadeHandleSize * 0.5f + 1.0f)
+                return { c, Drag::fadeIn };
+            if (std::abs (x - fadeOutX) <= fadeHandleSize * 0.5f + 1.0f)
+                return { c, Drag::fadeOut };
+        }
+
+        if (y < clip.getY() || y > clip.getBottom() || x < clip.getX() || x > clip.getRight())
+            continue;
+
+        if (x <= clip.getX() + edgeGrab)
+            return { c, Drag::leftEdge };
+        if (x >= clip.getRight() - edgeGrab)
+            return { c, Drag::rightEdge };
+
+        return { c, Drag::move };
     }
 
-    if (y < clip.getY() || y > clip.getBottom())
-        return Drag::none;
-
-    if (x >= clip.getX() && x <= clip.getX() + edgeGrab)
-        return Drag::leftEdge;
-    if (x <= clip.getRight() && x >= clip.getRight() - edgeGrab)
-        return Drag::rightEdge;
-    if (clip.contains (x, y))
-        return Drag::move;
-
-    return Drag::none;
+    return {};
 }
 
 //==============================================================================
+void TrackArea::paintClip (juce::Graphics& g, const Track& track, int trackIndex, int clipIndex, bool audible) const
+{
+    const auto clip = getClipBounds (trackIndex, clipIndex);
+
+    if (clip.isEmpty())
+        return;
+
+    const auto& data = track.clips[(size_t) clipIndex];
+    const auto lane = getLaneBounds (trackIndex);
+    const bool selected = ctx.ui.isClipSelected (data.uid);
+    const float alpha = audible ? 1.0f : 0.3f;
+    const float visibleEnd = (float) getWidth();
+
+    {
+        const juce::Graphics::ScopedSaveState clipState (g);
+        g.reduceClipRegion (clip.toNearestInt());
+
+        g.setColour (track.softColour.withMultipliedAlpha (alpha));
+        g.fillRect (clip);
+
+        // Kopfstreifen mit Samplename und Stretch-Anzeige; der Name bleibt lesbar,
+        // auch wenn der Clip-Anfang links aus dem Bild gerollt ist
+        auto header = clip.withHeight ((float) clipHeaderHeight);
+        g.setColour ((selected ? track.colour.darker (0.45f) : track.colour).withMultipliedAlpha (alpha));
+        g.fillRect (header);
+
+        auto headerText = header.withLeft (juce::jmax (header.getX(), (float) lane.getX())).reduced (5.0f, 0.0f);
+        headerText.setRight (juce::jmin (headerText.getRight(), visibleEnd - 5.0f));
+        const auto badge = juce::String (data.stretch, 2) + juce::String::fromUTF8 ("×");
+        const float badgeWidth = textWidth (monoFont (10.0f), badge) + 6.0f;
+        g.setColour (colours::white.withMultipliedAlpha (alpha));
+        g.setFont (monoFont (10.0f));
+        g.drawText (badge, headerText.removeFromRight (badgeWidth).toNearestInt(), juce::Justification::centredRight, false);
+        g.drawText (data.sample, headerText.toNearestInt(), juce::Justification::centredLeft, true);
+
+        // Wellenform des gespielten Ausschnitts
+        const auto peaks = ctx.model.waveformFor (data, trackIndex);
+        const int total = (int) peaks.size();
+        const int from = juce::jlimit (0, total - 1, (int) (data.trimStart * (total - 1)));
+        const int to = juce::jlimit (from + 1, total - 1, (int) (data.trimEnd * (total - 1)));
+        std::vector<float> slice (peaks.begin() + from, peaks.begin() + to + 1);
+        if (track.reverse)
+            std::reverse (slice.begin(), slice.end());
+
+        auto waveArea = clip.withTrimmedTop ((float) clipHeaderHeight).reduced (0.0f, 4.0f);
+        const int bars = juce::jlimit (1, (int) slice.size(), juce::roundToInt (clip.getWidth() / 3.0f));
+        draw::waveBars (g, waveArea, slice, bars, 1.0f, 0.04f, track.colour.withMultipliedAlpha (alpha));
+
+        // Fade-Flächen
+        const auto fadeArea = clip.withTrimmedTop ((float) clipHeaderHeight);
+        g.setColour (colours::surface.withAlpha (0.82f * alpha));
+        if (data.fadeIn > 0.0)
+        {
+            juce::Path p;
+            const float w = (float) data.fadeIn * clip.getWidth();
+            p.addTriangle (fadeArea.getX(), fadeArea.getY(), fadeArea.getX() + w, fadeArea.getY(),
+                           fadeArea.getX(), fadeArea.getBottom());
+            g.fillPath (p);
+        }
+        if (data.fadeOut > 0.0)
+        {
+            juce::Path p;
+            const float w = (float) data.fadeOut * clip.getWidth();
+            p.addTriangle (fadeArea.getRight() - w, fadeArea.getY(), fadeArea.getRight(), fadeArea.getY(),
+                           fadeArea.getRight(), fadeArea.getBottom());
+            g.fillPath (p);
+        }
+    }
+
+    // Rahmen: gewählte Clips kräftig, die anderen fein
+    if (selected)
+    {
+        g.setColour (colours::accentDark);
+        g.drawRect (clip, 2.0f);
+    }
+    else
+    {
+        g.setColour (track.colour.withMultipliedAlpha (0.85f));
+        g.drawRect (clip, 1.0f);
+    }
+
+    // Griffe für Fade-in und Fade-out
+    const float handleY = (float) (getRowBounds (trackIndex).getY() + fadeHandleTop);
+    for (const bool isFadeIn : { true, false })
+    {
+        const float x = isFadeIn ? clip.getX() + (float) data.fadeIn * clip.getWidth()
+                                 : clip.getRight() - (float) data.fadeOut * clip.getWidth();
+        const juce::Rectangle<float> handle (x - fadeHandleSize * 0.5f, handleY,
+                                             (float) fadeHandleSize, (float) fadeHandleSize);
+        g.setColour (track.colour);
+        g.fillRect (handle);
+        g.setColour (colours::surface);
+        g.drawRect (handle, 1.0f);
+    }
+}
+
+void TrackArea::paintOverlaps (juce::Graphics& g, const Track& track, int trackIndex) const
+{
+    /* Wo ein Clip über einem anderen liegt, wird schraffiert: unter dem sichtbaren Clip
+       liegt noch einer. Zu hören ist dort der obere – außer in seinen Fades, da scheint
+       der untere durch (das ist dann ein Crossfade). */
+    const auto lane = getLaneBounds (trackIndex).toFloat();
+
+    for (size_t lower = 0; lower < track.clips.size(); ++lower)
+    {
+        const auto& a = track.clips[lower];
+
+        if (! a.hasSample())
+            continue;
+
+        for (size_t upper = lower + 1; upper < track.clips.size(); ++upper)
+        {
+            const auto& b = track.clips[upper];
+
+            if (! b.hasSample())
+                continue;
+
+            const double from = juce::jmax (a.offset, b.offset);
+            const double to = juce::jmin (a.end(), b.end());
+
+            if (to <= from)
+                continue;
+
+            const auto area = juce::Rectangle<float>::leftTopRightBottom (
+                timeToX (from), lane.getY() + (float) (clipInset + clipHeaderHeight),
+                timeToX (to), lane.getBottom() - (float) clipInset);
+
+            const juce::Graphics::ScopedSaveState state (g);
+            g.reduceClipRegion (area.toNearestInt());
+
+            g.setColour (colours::text.withAlpha (0.30f));
+            for (float x = area.getX() - area.getHeight(); x < area.getRight(); x += 7.0f)
+                g.drawLine (x, area.getBottom(), x + area.getHeight(), area.getY(), 1.0f);
+
+            g.setColour (colours::text.withAlpha (0.45f));
+            g.fillRect (juce::Rectangle<float> (area.getX(), area.getY(), 1.0f, area.getHeight()));
+            g.fillRect (juce::Rectangle<float> (area.getRight() - 1.0f, area.getY(), 1.0f, area.getHeight()));
+        }
+    }
+}
+
 void TrackArea::paint (juce::Graphics& g)
 {
     g.fillAll (colours::workspace);
@@ -193,11 +394,12 @@ void TrackArea::paint (juce::Graphics& g)
     for (int i = 0; i < (int) zone->tracks.size(); ++i)
     {
         const auto& track = zone->tracks[(size_t) i];
-        const bool selected = i == zone->selectedTrack;
+        const bool current = i == zone->selectedTrack;
+        const bool selected = current || ctx.ui.selectedTracks.count (i) > 0;
         const bool audible = ! track.mute && (! anySolo || track.solo);
 
         const auto row = getRowBounds (i);
-        g.setColour (selected ? colours::lowerZone : colours::workspace);
+        g.setColour (current ? colours::lowerZone : colours::workspace);
         g.fillRect (row);
         g.setColour (colours::keyLine);
         g.fillRect (row.getX(), row.getBottom(), row.getWidth(), 1);
@@ -220,92 +422,26 @@ void TrackArea::paint (juce::Graphics& g)
                     g.fillRect (juce::Rectangle<float> (std::round (x), (float) lane.getY(), 1.0f, (float) lane.getHeight()));
             }
 
-            const auto clip = getClipBounds (i);
-
-            if (clip.isEmpty())
+            if (! track.hasClips())
             {
                 g.setColour (colours::textTertiary);
                 g.setFont (monoFont (10.0f));
                 g.drawText ("Sample aus der Liste hierher ziehen", lane.reduced (12, 0),
                             juce::Justification::centredLeft, true);
             }
-            else
+
+            // Von unten nach oben im Stapel, dann die Überschneidungen darüber
+            for (int c = 0; c < (int) track.clips.size(); ++c)
+                paintClip (g, track, i, c, audible);
+
+            paintOverlaps (g, track, i);
+
+            // Schere: der Strich, an dem geschnitten würde
+            if (ctx.ui.editTool == EditTool::split && hoverRow == i && hoverTime >= 0.0)
             {
-                {
-                    const juce::Graphics::ScopedSaveState clipState (g);
-                    g.reduceClipRegion (clip.toNearestInt());
-                    const float alpha = audible ? 1.0f : 0.3f;
-
-                    g.setColour (track.softColour.withMultipliedAlpha (alpha));
-                    g.fillRect (clip);
-
-                    // Kopfstreifen mit Clipname und Stretch-Anzeige; der Name bleibt lesbar,
-                    // auch wenn der Clip-Anfang links aus dem Bild gerollt ist
-                    auto header = clip.withHeight ((float) clipHeaderHeight);
-                    g.setColour (track.colour.withMultipliedAlpha (alpha));
-                    g.fillRect (header);
-
-                    auto headerText = header.withLeft (juce::jmax (header.getX(), (float) lane.getX())).reduced (5.0f, 0.0f);
-                    headerText.setRight (juce::jmin (headerText.getRight(), visibleEnd - 5.0f));
-                    const auto badge = juce::String (track.stretch, 2) + juce::String::fromUTF8 ("×");
-                    const float badgeWidth = textWidth (monoFont (10.0f), badge) + 6.0f;
-                    g.setColour (colours::white.withMultipliedAlpha (alpha));
-                    g.setFont (monoFont (10.0f));
-                    g.drawText (badge, headerText.removeFromRight (badgeWidth).toNearestInt(), juce::Justification::centredRight, false);
-                    g.drawText (track.clip, headerText.toNearestInt(), juce::Justification::centredLeft, true);
-
-                    // Wellenform des sichtbaren Ausschnitts
-                    const auto peaks = ctx.model.waveformFor (track, i);
-                    const int total = (int) peaks.size();
-                    const int from = juce::jlimit (0, total - 1, (int) (track.trimStart * (total - 1)));
-                    const int to = juce::jlimit (from + 1, total - 1, (int) (track.trimEnd * (total - 1)));
-                    std::vector<float> slice (peaks.begin() + from, peaks.begin() + to + 1);
-                    if (track.reverse)
-                        std::reverse (slice.begin(), slice.end());
-
-                    auto waveArea = clip.withTrimmedTop ((float) clipHeaderHeight).reduced (0.0f, 4.0f);
-                    const int bars = juce::jlimit (1, (int) slice.size(), juce::roundToInt (clip.getWidth() / 3.0f));
-                    draw::waveBars (g, waveArea, slice, bars, 1.0f, 0.04f, track.colour.withMultipliedAlpha (alpha));
-
-                    // Fade-Flächen
-                    const auto fadeArea = clip.withTrimmedTop ((float) clipHeaderHeight);
-                    g.setColour (colours::surface.withAlpha (0.82f * alpha));
-                    if (track.fadeIn > 0.0)
-                    {
-                        juce::Path p;
-                        const float w = (float) track.fadeIn * clip.getWidth();
-                        p.addTriangle (fadeArea.getX(), fadeArea.getY(), fadeArea.getX() + w, fadeArea.getY(),
-                                       fadeArea.getX(), fadeArea.getBottom());
-                        g.fillPath (p);
-                    }
-                    if (track.fadeOut > 0.0)
-                    {
-                        juce::Path p;
-                        const float w = (float) track.fadeOut * clip.getWidth();
-                        p.addTriangle (fadeArea.getRight() - w, fadeArea.getY(), fadeArea.getRight(), fadeArea.getY(),
-                                       fadeArea.getRight(), fadeArea.getBottom());
-                        g.fillPath (p);
-                    }
-                }
-
-                g.setColour (selected ? track.colour : track.colour.withMultipliedAlpha (0.85f));
-                g.drawRect (clip, 1.0f);
-                if (selected)
-                    g.drawRect (clip.reduced (1.0f), 1.0f);
-
-                // Griffe für Fade-in und Fade-out
-                const float handleY = (float) (row.getY() + fadeHandleTop);
-                for (const bool isFadeIn : { true, false })
-                {
-                    const float x = isFadeIn ? clip.getX() + (float) track.fadeIn * clip.getWidth()
-                                             : clip.getRight() - (float) track.fadeOut * clip.getWidth();
-                    const juce::Rectangle<float> handle (x - fadeHandleSize * 0.5f, handleY,
-                                                         (float) fadeHandleSize, (float) fadeHandleSize);
-                    g.setColour (track.colour);
-                    g.fillRect (handle);
-                    g.setColour (colours::surface);
-                    g.drawRect (handle, 1.0f);
-                }
+                const float x = timeToX (hoverTime);
+                g.setColour (colours::text);
+                g.fillRect (juce::Rectangle<float> (std::round (x), (float) lane.getY() + 2.0f, 1.0f, (float) lane.getHeight() - 4.0f));
             }
         }
 
@@ -316,6 +452,12 @@ void TrackArea::paint (juce::Graphics& g)
         g.setColour (colours::line);
         g.fillRect (head.getRight() - 1, head.getY(), 1, head.getHeight());
 
+        if (selected)
+        {
+            g.setColour (current ? colours::accent : colours::accent.withAlpha (0.5f));
+            g.fillRect (head.getX(), head.getY(), 3, head.getHeight());
+        }
+
         auto inner = head.reduced (9, 8);
         auto titleRow = inner.removeFromTop (16);
         g.setColour (track.colour);
@@ -323,8 +465,7 @@ void TrackArea::paint (juce::Graphics& g)
         titleRow.removeFromLeft (6);
         g.setColour (colours::text);
         g.setFont (sansFont (11.5f, Weight::medium));
-        g.drawText (track.name.isNotEmpty() ? track.name : "Spur " + juce::String (i + 1), titleRow,
-                    juce::Justification::centredLeft, true);
+        g.drawText (trackLabel (track, i), titleRow, juce::Justification::centredLeft, true);
 
         const auto mute = getMuteBounds (i);
         const auto solo = getSoloBounds (i);
@@ -401,56 +542,90 @@ void TrackArea::paint (juce::Graphics& g)
 void TrackArea::mouseMove (const juce::MouseEvent& e)
 {
     const int row = rowAt (e.getPosition());
+    const int previousRow = hoverRow;
+    const double previousTime = hoverTime;
+
     hoverRow = row;
+    hoverTime = -1.0;
 
-    auto newCursor = juce::MouseCursor::NormalCursor;
+    auto newCursor = juce::MouseCursor (juce::MouseCursor::NormalCursor);
 
-    if (row >= 0 && e.x >= headerWidth)
+    if (e.x >= headerWidth)
     {
-        switch (dragModeAt (row, e.getPosition()))
+        if (ctx.ui.editTool != EditTool::select)
         {
-            case Drag::leftEdge:
-            case Drag::rightEdge: newCursor = juce::MouseCursor::LeftRightResizeCursor; break;
-            case Drag::fadeIn:
-            case Drag::fadeOut:   newCursor = juce::MouseCursor::LeftRightResizeCursor; break;
-            case Drag::move:      newCursor = juce::MouseCursor::DraggingHandCursor; break;
-            case Drag::none:      break;
+            newCursor = toolIcons::cursorFor (ctx.ui.editTool);
+
+            if (ctx.ui.editTool == EditTool::split && row >= 0 && hitAt (row, e.getPosition()).clip >= 0)
+                hoverTime = geometry::snapTime (positionToTime (e.x), ctx.ui.snapToGrid);
+        }
+        else if (row >= 0)
+        {
+            switch (hitAt (row, e.getPosition()).mode)
+            {
+                case Drag::leftEdge:
+                case Drag::rightEdge:
+                case Drag::fadeIn:
+                case Drag::fadeOut:   newCursor = juce::MouseCursor::LeftRightResizeCursor; break;
+                case Drag::move:      newCursor = juce::MouseCursor::DraggingHandCursor; break;
+                case Drag::none:
+                case Drag::erase:
+                case Drag::palette:   break;
+            }
         }
     }
 
     setMouseCursor (newCursor);
+
+    if (previousRow != hoverRow || previousTime != hoverTime)
+        repaint();
+}
+
+void TrackArea::mouseExit (const juce::MouseEvent&)
+{
+    if (hoverTime >= 0.0)
+    {
+        hoverTime = -1.0;
+        repaint();
+    }
 }
 
 void TrackArea::mouseDown (const juce::MouseEvent& e)
 {
-    // Damit Entf hier ankommt
+    // Damit Entf, X und die Zwischenablage hier ankommen
     grabKeyboardFocus();
+
+    // Eine offen gebliebene Werkzeugleiste schließt der nächste Klick daneben
+    if (palette != nullptr)
+    {
+        closePalette();
+        return;
+    }
 
     auto* zone = getZone();
     const int row = rowAt (e.getPosition());
+    const bool extend = e.mods.isShiftDown();   // Shift erweitert die Auswahl
 
     if (zone == nullptr)
         return;
 
-    if (row >= 0 && zone->selectedTrack != row)
-    {
-        zone->selectedTrack = row;
-        ctx.model.notifyChanged();
-    }
-
-    if (e.mods.isPopupMenu())
-    {
-        showTrackMenu (row);
-        return;
-    }
-
-    if (row < 0)
-        return;
-
-    auto& track = zone->tracks[(size_t) row];
-
+    // Spurkopf: Spur wählen, Stumm/Solo, Rechtsklick fürs Menü
     if (e.x < headerWidth)
     {
+        if (row < 0)
+            return;
+
+        auto& track = zone->tracks[(size_t) row];
+
+        if (e.mods.isPopupMenu())
+        {
+            if (ctx.ui.selectedTracks.count (row) == 0)
+                selectTrack (row, false);
+
+            showTrackMenu (row);
+            return;
+        }
+
         if (getMuteBounds (row).contains (e.getPosition()))
         {
             ctx.step (track.mute ? "Spur hörbar"_u : "Spur stumm"_u);
@@ -463,16 +638,109 @@ void TrackArea::mouseDown (const juce::MouseEvent& e)
             track.solo = ! track.solo;
             ctx.model.notifyChanged();
         }
+        else
+        {
+            selectTrack (row, extend);
+        }
+
         return;
     }
 
-    drag = dragModeAt (row, e.getPosition());
+    // Zeitleiste: rechte Taste gehalten öffnet die Werkzeugleiste
+    if (e.mods.isRightButtonDown())
+    {
+        openPalette (e.getPosition());
+        drag = Drag::palette;
+        return;
+    }
+
+    if (row < 0)
+    {
+        if (! extend)
+            clearClipSelection();
+        return;
+    }
+
+    switch (ctx.ui.editTool)
+    {
+        case EditTool::erase:
+            eraseClipAt (row, e.getPosition());
+            drag = Drag::erase;      // weiter über andere Clips wischen
+            return;
+
+        case EditTool::split:
+            splitClipAt (row, e.getPosition());
+            return;
+
+        case EditTool::select:
+            break;
+    }
+
+    const auto hit = hitAt (row, e.getPosition());
+
+    if (hit.clip < 0)
+    {
+        // Leere Stelle: Auswahl der Clips aufheben, die Spur wird die gewählte
+        if (! extend)
+        {
+            clearClipSelection();
+            selectTrack (row, false);
+        }
+        return;
+    }
+
+    auto& clip = zone->tracks[(size_t) row].clips[(size_t) hit.clip];
+
+    /* Shift auf dem Clip-Körper erweitert die Auswahl. An Kante und Fade-Ecke bleibt Shift,
+       was es war: der Umschalter zwischen Zuschneiden und Strecken. */
+    if (extend && hit.mode == Drag::move)
+    {
+        selectClip (clip, row, true);
+        return;
+    }
+
+    if (! ctx.ui.isClipSelected (clip.uid))
+        selectClip (clip, row, false);
+    else
+    {
+        ctx.ui.focusClip = clip.uid;
+        ctx.ui.changed();
+    }
+
+    drag = hit.mode;
     dragTrack = row;
-    grabOffset = positionToTime (e.x) - track.offset;
+    dragClip = clip.uid;
+    dragMoved = false;
+    grabOffset = positionToTime (e.x) - clip.offset;
+    moveOrigins.clear();
+    dragStartRow = row;
+    createdTracks = 0;
+
+    // Verschieben nimmt alle gewählten Clips der Zone mit, samt ihrer Spur
+    if (drag == Drag::move)
+        for (int t = 0; t < (int) zone->tracks.size(); ++t)
+            for (auto& c : zone->tracks[(size_t) t].clips)
+                if (ctx.ui.isClipSelected (c.uid))
+                    moveOrigins[c.uid] = { c.offset, t };
 }
 
 void TrackArea::mouseDrag (const juce::MouseEvent& e)
 {
+    if (drag == Drag::palette)
+    {
+        if (palette != nullptr)
+            palette->setHover (palette->itemAt (palette->getLocalPoint (this, e.getPosition())));
+        return;
+    }
+
+    if (drag == Drag::erase)
+    {
+        const int row = rowAt (e.getPosition());
+        if (row >= 0)
+            eraseClipAt (row, e.getPosition());
+        return;
+    }
+
     if (drag == Drag::none)
         return;
 
@@ -485,10 +753,34 @@ void TrackArea::mouseDrag (const juce::MouseEvent& e)
     applyDrag (e);
 }
 
-void TrackArea::mouseUp (const juce::MouseEvent&)
+void TrackArea::mouseUp (const juce::MouseEvent& e)
 {
+    if (drag == Drag::palette)
+    {
+        drag = Drag::none;
+
+        if (palette == nullptr)
+            return;
+
+        const int item = palette->itemAt (palette->getLocalPoint (this, e.getPosition()));
+
+        if (item >= 0)
+            setTool (paletteTools[item]);
+        else if (e.getDistanceFromDragStart() < 4)
+            palette->makeSticky();       // nur kurz geklickt: offen lassen, Linksklick wählt
+        else
+            closePalette();
+
+        return;
+    }
+
+    if (drag == Drag::move && dragMoved)
+        finishMove();
+
     drag = Drag::none;
     dragTrack = -1;
+    dragClip = 0;
+    moveOrigins.clear();
 }
 
 void TrackArea::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel)
@@ -519,9 +811,27 @@ void TrackArea::scrollBy (double delta)
 
 bool TrackArea::keyPressed (const juce::KeyPress& key)
 {
+    if (key == juce::KeyPress::escapeKey)
+    {
+        if (palette != nullptr)
+            closePalette();
+        else
+            clearClipSelection();
+
+        return true;
+    }
+
     if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
     {
-        deleteSelected();
+        deleteSelectedClips();
+        return true;
+    }
+
+    // X ohne Zusatztaste: Crossfade. Strg+X gehört der Zwischenablage (Befehle der Shell).
+    if (juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode()) == 'X'
+        && ! key.getModifiers().isAnyModifierKeyDown())
+    {
+        crossfadeSelected();
         return true;
     }
 
@@ -534,22 +844,27 @@ void TrackArea::applyDrag (const juce::MouseEvent& e)
     if (zone == nullptr || ! juce::isPositiveAndBelow (dragTrack, (int) zone->tracks.size()))
         return;
 
-    auto& track = zone->tracks[(size_t) dragTrack];
+    auto* clip = zone->tracks[(size_t) dragTrack].findClip (dragClip);
+
+    if (clip == nullptr)
+        return;
+
     const double pointerTime = positionToTime (e.x);
     const bool snapping = ctx.ui.snapToGrid;
     const bool stretching = isStretching (e);
 
-    geometry::ClipState clip { track.offset, track.natural, track.stretch,
-                               track.trimStart, track.trimEnd, track.fadeIn, track.fadeOut };
+    auto state = toState (*clip);
 
     switch (drag)
     {
-        case Drag::move:      clip = geometry::moveClip (clip, pointerTime, grabOffset, snapping, maxAxis); break;
-        case Drag::rightEdge: clip = geometry::dragRightEdge (clip, pointerTime, snapping, stretching, maxAxis); break;
-        case Drag::leftEdge:  clip = geometry::dragLeftEdge (clip, pointerTime, snapping, stretching); break;
-        case Drag::fadeIn:    clip = geometry::dragFadeIn (clip, pointerTime); break;
-        case Drag::fadeOut:   clip = geometry::dragFadeOut (clip, pointerTime); break;
-        case Drag::none:      return;
+        case Drag::move:      state = geometry::moveClip (state, pointerTime, grabOffset, snapping, maxAxis); break;
+        case Drag::rightEdge: state = geometry::dragRightEdge (state, pointerTime, snapping, stretching, maxAxis); break;
+        case Drag::leftEdge:  state = geometry::dragLeftEdge (state, pointerTime, snapping, stretching); break;
+        case Drag::fadeIn:    state = geometry::dragFadeIn (state, pointerTime); break;
+        case Drag::fadeOut:   state = geometry::dragFadeOut (state, pointerTime); break;
+        case Drag::none:
+        case Drag::erase:
+        case Drag::palette:   return;
     }
 
     // Der Name der Geste hält den ganzen Zug als einen Schritt zusammen
@@ -560,82 +875,545 @@ void TrackArea::applyDrag (const juce::MouseEvent& e)
         case Drag::leftEdge:  ctx.step (stretching ? "Clip gestreckt"_u : "Clip zugeschnitten"_u); break;
         case Drag::fadeIn:    ctx.step ("Fade ein geändert"_u); break;
         case Drag::fadeOut:   ctx.step ("Fade aus geändert"_u); break;
-        case Drag::none:      break;
+        case Drag::none:
+        case Drag::erase:
+        case Drag::palette:   break;
     }
 
-    track.offset = clip.offset;
-    track.stretch = clip.stretch;
-    track.trimStart = clip.trimStart;
-    track.trimEnd = clip.trimEnd;
-    track.fadeIn = clip.fadeIn;
-    track.fadeOut = clip.fadeOut;
+    if (drag != Drag::move || moveOrigins.empty())
+    {
+        applyState (*clip, state);
+        dragMoved = true;
+        ctx.model.notifyChanged();
+        return;
+    }
+
+    /* Waagerecht: alle gewählten Clips wandern um dasselbe Stück, keiner vor den Anfang
+       der Achse. */
+    const auto grabbed = moveOrigins.find (dragClip);
+    const double origin = grabbed != moveOrigins.end() ? grabbed->second.offset : clip->offset;
+    double delta = state.offset - origin;
+
+    int topRow = std::numeric_limits<int>::max(), bottomRow = 0;
+
+    for (const auto& [uid, from] : moveOrigins)
+    {
+        delta = juce::jmax (delta, -from.offset);
+        topRow = juce::jmin (topRow, from.track);
+        bottomRow = juce::jmax (bottomRow, from.track);
+    }
+
+    /* Senkrecht: um so viele Spuren, wie der Zeiger gewandert ist – nicht über die erste
+       hinaus, und unten höchstens eine Spur hinter die letzte. Dorthin gezogen, entsteht
+       sie; wieder zurückgezogen, verschwindet sie, solange nichts anderes darauf liegt. */
+    const int pointerRow = e.y < 0 ? 0 : e.y / (rowHeight + 1);
+    int rowDelta = juce::jmax (pointerRow - dragStartRow, -topRow);
+    rowDelta = juce::jmin (rowDelta, (int) zone->tracks.size() - bottomRow);
+
+    const int needed = bottomRow + rowDelta + 1;
+
+    while ((int) zone->tracks.size() < needed)
+    {
+        appendTrack (*zone);
+        ++createdTracks;
+    }
+
+    // Zeiger auf Spuren und Clips gelten ab hier nicht mehr – nur noch über die Kennung
+    for (const auto& [uid, from] : moveOrigins)
+    {
+        const int target = from.track + rowDelta;
+        const int current = zone->trackOfClip (uid);
+
+        if (current < 0)
+            continue;
+
+        if (current != target)
+        {
+            auto& source = zone->tracks[(size_t) current].clips;
+            const auto found = std::find_if (source.begin(), source.end(), [uid = uid] (const Clip& c) { return c.uid == uid; });
+            auto moved = *found;
+            source.erase (found);
+            zone->tracks[(size_t) target].clips.push_back (moved);   // obenauf
+        }
+
+        if (auto* placed = zone->tracks[(size_t) target].findClip (uid))
+            placed->offset = from.offset + delta;
+    }
+
+    while (createdTracks > 0 && (int) zone->tracks.size() > needed && zone->tracks.back().clips.empty())
+    {
+        zone->tracks.pop_back();
+        --createdTracks;
+    }
+
+    // Die Spur des gezogenen Clips ist die gewählte – Inspektor und Einfügen folgen ihr
+    dragTrack = zone->trackOfClip (dragClip);
+    if (dragTrack >= 0 && zone->selectedTrack != dragTrack)
+    {
+        zone->selectedTrack = dragTrack;
+        ctx.ui.selectedTracks = { dragTrack };
+        ctx.ui.changed();
+    }
+
+    dragMoved = true;
+    ctx.model.notifyChanged();
+}
+
+void TrackArea::finishMove()
+{
+    /* Wer verschoben wurde, ist „zuletzt gesetzt“ und kommt im Stapel nach oben – so gilt
+       die Regel „der obere klingt“ auch nach dem Ziehen. */
+    auto* zone = getZone();
+
+    if (zone == nullptr)
+        return;
+
+    ctx.step ("Clip verschoben"_u);
+
+    for (auto& track : zone->tracks)
+        std::stable_partition (track.clips.begin(), track.clips.end(),
+                               [this] (const Clip& c) { return moveOrigins.count (c.uid) == 0; });
 
     ctx.model.notifyChanged();
 }
 
 //==============================================================================
-void TrackArea::deleteSelected()
+void TrackArea::selectTrack (int trackIndex, bool extend)
 {
-    const auto* zone = getZone();
+    auto* zone = getZone();
 
-    if (zone == nullptr || ! juce::isPositiveAndBelow (zone->selectedTrack, (int) zone->tracks.size()))
+    if (zone == nullptr || ! juce::isPositiveAndBelow (trackIndex, (int) zone->tracks.size()))
         return;
 
-    const int index = zone->selectedTrack;
+    auto& selection = ctx.ui.selectedTracks;
 
-    if (zone->tracks[(size_t) index].hasClip())
-        removeClip (index);
+    if (extend)
+    {
+        if (selection.count (trackIndex) > 0 && selection.size() > 1)
+        {
+            selection.erase (trackIndex);
+
+            // Die Hauptspur muss eine der gewählten bleiben
+            if (zone->selectedTrack == trackIndex)
+            {
+                zone->selectedTrack = *selection.begin();
+                ctx.model.notifyChanged();
+            }
+
+            ctx.ui.changed();
+            return;
+        }
+
+        selection.insert (zone->selectedTrack);
+        selection.insert (trackIndex);
+    }
     else
-        removeTrack (index);
+    {
+        selection = { trackIndex };
+    }
+
+    if (zone->selectedTrack != trackIndex)
+    {
+        zone->selectedTrack = trackIndex;
+        ctx.model.notifyChanged();
+    }
+
+    ctx.ui.changed();
 }
 
-void TrackArea::removeClip (int trackIndex)
+void TrackArea::selectClip (const Clip& clip, int trackIndex, bool extend)
 {
     auto* zone = getZone();
 
-    if (zone == nullptr || ! juce::isPositiveAndBelow (trackIndex, (int) zone->tracks.size()))
+    if (zone == nullptr)
         return;
 
-    auto& track = zone->tracks[(size_t) trackIndex];
-    const auto clipName = track.clip;
+    auto& selection = ctx.ui.selectedClips;
 
-    ctx.step ("Clip entfernt");
-    track.clip.clear();
+    if (extend && selection.count (clip.uid) > 0)
+    {
+        selection.erase (clip.uid);
+    }
+    else
+    {
+        if (! extend)
+            selection.clear();
+
+        selection.insert (clip.uid);
+        ctx.ui.focusClip = clip.uid;
+    }
+
+    // Die Spur des Clips wird die gewählte – Inspektor, Sample-Editor und Einfügen folgen ihr
+    if (ctx.ui.selectedTracks.size() <= 1)
+        ctx.ui.selectedTracks = { trackIndex };
+
+    if (zone->selectedTrack != trackIndex)
+    {
+        zone->selectedTrack = trackIndex;
+        ctx.model.notifyChanged();
+    }
+
+    ctx.ui.changed();
+}
+
+void TrackArea::clearClipSelection()
+{
+    if (! ctx.ui.selectedClips.empty())
+    {
+        ctx.ui.selectedClips.clear();
+        ctx.ui.changed();
+    }
+}
+
+//==============================================================================
+void TrackArea::deleteSelectedClips()
+{
+    auto* zone = getZone();
+
+    if (zone == nullptr)
+        return;
+
+    int removed = 0;
+
+    for (auto& track : zone->tracks)
+        for (const auto& clip : track.clips)
+            if (ctx.ui.isClipSelected (clip.uid))
+                ++removed;
+
+    if (removed == 0)
+    {
+        ctx.toast ("Kein Clip gewählt · Spuren löscht der Rechtsklick auf den Spurkopf"_u);
+        return;
+    }
+
+    ctx.step (removed == 1 ? "Clip gelöscht"_u : "Clips gelöscht"_u);
+
+    for (auto& track : zone->tracks)
+        track.clips.erase (std::remove_if (track.clips.begin(), track.clips.end(),
+                                           [this] (const Clip& c) { return ctx.ui.isClipSelected (c.uid); }),
+                           track.clips.end());
+
+    ctx.ui.selectedClips.clear();
     ctx.model.notifyChanged();
-    ctx.toast (clipName + " entfernt · die Spur bleibt · Strg+Z holt ihn zurück"_u);
+    ctx.ui.changed();
+    ctx.toast (countText (removed, "Clip gelöscht", "Clips gelöscht") + " · Strg+Z holt sie zurück"_u);
 }
 
-void TrackArea::removeTrack (int trackIndex)
+void TrackArea::eraseClipAt (int trackIndex, juce::Point<int> position)
+{
+    auto* zone = getZone();
+    const auto hit = hitAt (trackIndex, position);
+
+    if (zone == nullptr || hit.clip < 0)
+        return;
+
+    auto& clips = zone->tracks[(size_t) trackIndex].clips;
+    const auto uid = clips[(size_t) hit.clip].uid;
+
+    ctx.step ("Clip gelöscht"_u);
+    clips.erase (clips.begin() + hit.clip);
+    ctx.ui.selectedClips.erase (uid);
+    ctx.model.notifyChanged();
+}
+
+void TrackArea::splitClipAt (int trackIndex, juce::Point<int> position)
+{
+    auto* zone = getZone();
+    const auto hit = hitAt (trackIndex, position);
+
+    if (zone == nullptr || hit.clip < 0)
+        return;
+
+    auto& clips = zone->tracks[(size_t) trackIndex].clips;
+    auto& original = clips[(size_t) hit.clip];
+    const double time = geometry::snapTime (positionToTime (position.x), ctx.ui.snapToGrid);
+
+    geometry::ClipState left, right;
+
+    if (! geometry::splitClip (toState (original), time, left, right))
+        return;
+
+    ctx.step ("Clip geschnitten");
+
+    Clip second = original;
+    second.uid = Clip::nextUid();
+    applyState (original, left);
+    applyState (second, right);
+
+    // Das rechte Stück liegt im Stapel gleich über dem linken – wie der Clip vorher
+    clips.insert (clips.begin() + hit.clip + 1, second);
+    ctx.model.notifyChanged();
+}
+
+void TrackArea::crossfadeSelected()
 {
     auto* zone = getZone();
 
-    if (zone == nullptr || ! juce::isPositiveAndBelow (trackIndex, (int) zone->tracks.size()))
+    if (zone == nullptr)
         return;
 
-    const auto& track = zone->tracks[(size_t) trackIndex];
-    const auto name = track.name.isNotEmpty() ? track.name : "Spur " + juce::String (trackIndex + 1);
+    int made = 0;
+
+    for (auto& track : zone->tracks)
+    {
+        std::vector<Clip*> chosen;
+
+        for (auto& clip : track.clips)
+            if (ctx.ui.isClipSelected (clip.uid) && clip.hasSample())
+                chosen.push_back (&clip);
+
+        for (size_t a = 0; a < chosen.size(); ++a)
+        {
+            for (size_t b = a + 1; b < chosen.size(); ++b)
+            {
+                auto first = toState (*chosen[a]);
+                auto second = toState (*chosen[b]);
+
+                if (! geometry::crossfade (first, second))
+                    continue;
+
+                if (made == 0)
+                    ctx.step ("Crossfade");
+
+                applyState (*chosen[a], first);
+                applyState (*chosen[b], second);
+                ++made;
+            }
+        }
+    }
+
+    if (made == 0)
+    {
+        ctx.toast ("Für einen Crossfade zwei sich überschneidende Clips derselben Spur wählen (Shift+Klick)"_u);
+        return;
+    }
+
+    ctx.model.notifyChanged();
+    ctx.toast (made == 1 ? "Crossfade über die Überschneidung gelegt"_u
+                         : juce::String (made) + " Crossfades gelegt");
+}
+
+void TrackArea::removeTracks (int clickedTrack)
+{
+    auto* zone = getZone();
+
+    if (zone == nullptr)
+        return;
+
+    std::vector<int> doomed;
+
+    if (ctx.ui.selectedTracks.count (clickedTrack) > 0 && ctx.ui.selectedTracks.size() > 1)
+        doomed.assign (ctx.ui.selectedTracks.begin(), ctx.ui.selectedTracks.end());
+    else
+        doomed = { clickedTrack };
+
+    const auto name = doomed.size() == 1 && juce::isPositiveAndBelow (clickedTrack, (int) zone->tracks.size())
+                          ? trackLabel (zone->tracks[(size_t) clickedTrack], clickedTrack)
+                          : juce::String ((int) doomed.size()) + " Spuren";
 
     ctx.step (name + " gelöscht"_u);
-    ctx.processor.removeTrack (zone->id, trackIndex);
+
+    // Von hinten nach vorn, damit die Nummern der übrigen stimmen
+    const auto zoneId = zone->id;
+    std::sort (doomed.rbegin(), doomed.rend());
+
+    for (const int index : doomed)
+        ctx.processor.removeTrack (zoneId, index);
+
+    if (auto* remaining = getZone())
+        ctx.ui.selectedTracks = { remaining->selectedTrack };
+
+    ctx.ui.changed();
     ctx.toast (name + " gelöscht · Strg+Z holt sie zurück"_u);
 }
 
 void TrackArea::showTrackMenu (int trackIndex)
 {
-    const auto* zone = getZone();
+    const auto count = ctx.ui.selectedTracks.count (trackIndex) > 0 ? (int) ctx.ui.selectedTracks.size() : 1;
+
     juce::PopupMenu menu;
-
-    if (zone != nullptr && juce::isPositiveAndBelow (trackIndex, (int) zone->tracks.size()))
-    {
-        const auto& track = zone->tracks[(size_t) trackIndex];
-        menu.addSectionHeader (track.name.isNotEmpty() ? track.name : "Spur " + juce::String (trackIndex + 1));
-        menu.addItem ("Clip entfernen (Entf)", track.hasClip(), false, [this, trackIndex] { removeClip (trackIndex); });
-        menu.addItem ("Spur löschen"_u, [this, trackIndex] { removeTrack (trackIndex); });
-        menu.addSeparator();
-    }
-
+    menu.addItem (count > 1 ? juce::String (count) + " Spuren löschen"_u : "Spur löschen"_u,
+                  [this, trackIndex] { removeTracks (trackIndex); });
+    menu.addSeparator();
     menu.addItem ("Spur hinzufügen"_u, [this] { ctx.commands.invokeDirectly (cmd::addTrack, false); });
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+//==============================================================================
+void TrackArea::copyClips()
+{
+    auto* zone = getZone();
+    std::vector<ClipboardClip> copied;
+
+    if (zone != nullptr)
+        for (int t = 0; t < (int) zone->tracks.size(); ++t)
+            for (const auto& clip : zone->tracks[(size_t) t].clips)
+                if (ctx.ui.isClipSelected (clip.uid) && clip.hasSample())
+                    copied.push_back ({ clip, t });
+
+    if (copied.empty())
+    {
+        ctx.toast ("Kein Clip gewählt"_u);
+        return;
+    }
+
+    /* Bezug ist der früheste Clip der obersten Spur: er landet beim Einfügen am Locator auf
+       der gewählten Spur. Alle anderen behalten Zeit- und Spurabstand zu ihm. */
+    int topTrack = std::numeric_limits<int>::max();
+    for (const auto& entry : copied)
+        topTrack = juce::jmin (topTrack, entry.trackOffset);
+
+    double base = std::numeric_limits<double>::max();
+    for (const auto& entry : copied)
+        if (entry.trackOffset == topTrack)
+            base = juce::jmin (base, entry.clip.offset);
+
+    for (auto& entry : copied)
+    {
+        entry.clip.offset -= base;
+        entry.trackOffset -= topTrack;
+    }
+
+    ctx.ui.clipboard = std::move (copied);
+    ctx.toast (countText ((int) ctx.ui.clipboard.size(), "Clip kopiert", "Clips kopiert"));
+}
+
+void TrackArea::cutClips()
+{
+    auto* zone = getZone();
+
+    if (zone == nullptr || ctx.ui.selectedClips.empty())
+    {
+        ctx.toast ("Kein Clip gewählt"_u);
+        return;
+    }
+
+    copyClips();
+
+    ctx.step ("Ausgeschnitten");
+
+    for (auto& track : zone->tracks)
+        track.clips.erase (std::remove_if (track.clips.begin(), track.clips.end(),
+                                           [this] (const Clip& c) { return ctx.ui.isClipSelected (c.uid); }),
+                           track.clips.end());
+
+    ctx.ui.selectedClips.clear();
+    ctx.model.notifyChanged();
+    ctx.ui.changed();
+    ctx.toast (countText ((int) ctx.ui.clipboard.size(), "Clip ausgeschnitten", "Clips ausgeschnitten"));
+}
+
+void TrackArea::pasteClips()
+{
+    auto* zone = getZone();
+
+    if (ctx.ui.clipboard.empty())
+    {
+        ctx.toast ("Die Zwischenablage ist leer"_u);
+        return;
+    }
+
+    if (zone == nullptr || zone->getSelectedTrack() == nullptr)
+    {
+        ctx.toast ("Erst eine Spur wählen"_u);
+        return;
+    }
+
+    const int targetTrack = zone->selectedTrack;
+
+    // Liegt ein Clip vor dem Bezugsclip, rückt alles so weit nach rechts, dass er bei 0 beginnt
+    double earliest = 0.0;
+    for (const auto& entry : ctx.ui.clipboard)
+        earliest = juce::jmin (earliest, entry.clip.offset);
+
+    const double start = juce::jmax (ctx.ui.locator, -earliest);
+
+    ctx.step ("Eingefügt"_u);
+    ctx.ui.selectedClips.clear();
+
+    int newTracks = 0;
+
+    for (const auto& entry : ctx.ui.clipboard)
+    {
+        const int row = targetTrack + entry.trackOffset;
+
+        // Spuren, die es darunter noch nicht gibt, entstehen
+        while ((int) zone->tracks.size() <= row)
+        {
+            appendTrack (*zone);
+            ++newTracks;
+        }
+
+        auto clip = entry.clip;
+        clip.uid = Clip::nextUid();
+        clip.offset += start;
+        zone->tracks[(size_t) row].clips.push_back (clip);   // obenauf
+        ctx.ui.selectedClips.insert (clip.uid);
+        ctx.ui.focusClip = clip.uid;
+    }
+
+    ctx.model.notifyChanged();
+    ctx.ui.changed();
+
+    auto message = countText ((int) ctx.ui.clipboard.size(), "Clip eingefügt", "Clips eingefügt");
+    if (newTracks > 0)
+        message << " · "_u << countText (newTracks, "neue Spur", "neue Spuren");
+    ctx.toast (message);
+}
+
+//==============================================================================
+void TrackArea::openPalette (juce::Point<int> position)
+{
+    closePalette();
+
+    auto* top = getTopLevelComponent();
+
+    if (top == nullptr)
+        return;
+
+    palette = std::make_unique<ToolPalette>();
+    palette->setCurrent (ctx.ui.editTool);
+    palette->onChoose = [this] (EditTool tool) { setTool (tool); };
+    palette->onDismiss = [this] { closePalette(); };
+
+    /* Über dem Zeiger, damit ein bloßer Klick auf nichts fällt und die Leiste offen bleibt;
+       ist oben kein Platz, darunter. */
+    const auto at = top->getLocalPoint (this, position);
+    const auto size = ToolPalette::idealSize();
+    auto bounds = size.withPosition (at.x - size.getWidth() / 2, at.y - size.getHeight() - 10);
+
+    if (bounds.getY() < 0)
+        bounds.setY (at.y + 14);
+
+    palette->setBounds (bounds.constrainedWithin (top->getLocalBounds()));
+    top->addAndMakeVisible (*palette);
+    palette->toFront (false);
+}
+
+void TrackArea::closePalette()
+{
+    if (palette == nullptr)
+        return;
+
+    if (auto* parent = palette->getParentComponent())
+        parent->removeChildComponent (palette.get());
+
+    palette.reset();
+}
+
+void TrackArea::setTool (EditTool tool)
+{
+    closePalette();
+
+    if (ctx.ui.editTool == tool)
+        return;
+
+    ctx.ui.editTool = tool;
+    ctx.ui.changed();
+
+    ctx.toast (tool == EditTool::erase ? "Werkzeug Löschen · Klick auf einen Clip löscht ihn"_u
+             : tool == EditTool::split ? "Werkzeug Schere · Klick auf einen Clip schneidet ihn am Strich"_u
+                                       : "Werkzeug Auswahl"_u);
 }
 
 //==============================================================================
@@ -697,38 +1475,29 @@ void TrackArea::itemDropped (const SourceDetails& details)
                                       geometry::snapTime (positionToTime (details.localPosition.x), ctx.ui.snapToGrid));
     const int row = details.localPosition.y / (rowHeight + 1);
 
-    ctx.step (sample->name + " auf Spur gelegt");
+    ctx.step (sample->name + " eingefügt"_u);
 
-    if (juce::isPositiveAndBelow (row, (int) zone->tracks.size()))
+    int target = row;
+
+    if (! juce::isPositiveAndBelow (row, (int) zone->tracks.size()))
     {
-        // Auf eine Spur: ihr Clip wird ersetzt – eine Spur hat genau einen
-        auto& track = zone->tracks[(size_t) row];
-        const bool replacing = track.hasClip();
-        const auto previous = track.clip;
-
-        track.placeSample (*sample, time);
-        zone->selectedTrack = row;
-        ctx.model.notifyChanged();
-        ctx.toast (replacing ? sample->name + " ersetzt "_u + previous
-                             : sample->name + " → "_u + track.name);
+        // Unter die letzte Spur: neue Spur
+        appendTrack (*zone);
+        target = (int) zone->tracks.size() - 1;
     }
-    else
-    {
-        // Darunter: neue Spur
-        const auto& palette = trackPalette()[zone->tracks.size() % trackPalette().size()];
 
-        Track track;
-        track.name.clear();
-        track.colour = palette.main;
-        track.softColour = palette.soft;
-        track.gain = 0.8f;
-        track.placeSample (*sample, time);
+    // Obenauf – eine Spur trägt beliebig viele Clips
+    auto& track = zone->tracks[(size_t) target];
+    const auto& clip = track.addSample (*sample, time);
 
-        zone->tracks.push_back (std::move (track));
-        zone->selectedTrack = (int) zone->tracks.size() - 1;
-        ctx.model.notifyChanged();
-        ctx.toast ("Neue Spur "_u + zone->tracks.back().name);
-    }
+    zone->selectedTrack = target;
+    ctx.ui.selectedClips = { clip.uid };
+    ctx.ui.focusClip = clip.uid;
+    ctx.ui.selectedTracks = { target };
+
+    ctx.model.notifyChanged();
+    ctx.ui.changed();
+    ctx.toast (sample->name + " → "_u + trackLabel (track, target));
 
     grabKeyboardFocus();
 }
@@ -736,6 +1505,16 @@ void TrackArea::itemDropped (const SourceDetails& details)
 //==============================================================================
 void TrackArea::changeListenerCallback (juce::ChangeBroadcaster*)
 {
+    // Eine andere Zone: die Auswahl galt der alten
+    const auto zoneId = ctx.model.selectedZoneId;
+
+    if (zoneId != shownZoneId)
+    {
+        shownZoneId = zoneId;
+        ctx.ui.selectedClips.clear();
+        ctx.ui.selectedTracks.clear();
+    }
+
     if (ctx.ui.playing && ! isTimerRunning())
         startTimerHz (30);
     else if (! ctx.ui.playing && isTimerRunning())

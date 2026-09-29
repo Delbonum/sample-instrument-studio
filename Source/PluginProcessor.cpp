@@ -273,20 +273,18 @@ StudioProcessor::BounceOutcome StudioProcessor::bounceZone (const juce::String& 
 
     Track bounced;
     bounced.name = zone->name;
-    bounced.clip = file.getFileName();
     bounced.colour = colour;
     bounced.softColour = softColour;
     bounced.gain = 1.0f;          // Pegel, Panorama, Tonhöhe und Effekte stecken schon im Sample
     bounced.pan = 0.0f;
     bounced.pitch = 0;
     bounced.cents = 0.5f;
-    bounced.stretch = 1.0;
-    bounced.trimStart = 0.0;
-    bounced.trimEnd = 1.0;
-    bounced.fadeIn = 0.0;
-    bounced.fadeOut = 0.0;
     bounced.loop = LoopMode::oneShot;
-    bounced.natural = juce::jlimit (0.02, 1.0, bounce.getLengthSeconds() / InstrumentModel::timelineSeconds);
+
+    Clip whole;
+    whole.sample = file.getFileName();
+    whole.natural = juce::jmax (0.02, bounce.getLengthSeconds() / InstrumentModel::timelineSeconds);
+    bounced.clips.push_back (whole);
 
     zone->tracks.clear();
     zone->tracks.push_back (std::move (bounced));
@@ -421,8 +419,9 @@ bool StudioProcessor::loadBundledInstrument()
 bool StudioProcessor::zoneHasAudio (const Zone& zone) const
 {
     for (const auto& track : zone.tracks)
-        if (sampleCache.get (track.clip) != nullptr)
-            return true;
+        for (const auto& clip : track.clips)
+            if (clip.hasSample() && sampleCache.get (clip.sample) != nullptr)
+                return true;
 
     return false;
 }

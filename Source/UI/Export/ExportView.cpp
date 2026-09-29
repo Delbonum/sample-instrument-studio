@@ -81,15 +81,18 @@ juce::Array<juce::File> ExportView::collectUsedSamples() const
     {
         for (const auto& track : zone.tracks)
         {
-            const auto* sample = ctx.model.findSample (track.clip);
+            for (const auto& clip : track.clips)
+            {
+                const auto* sample = ctx.model.findSample (clip.sample);
 
-            if (sample == nullptr || ! sample->file.existsAsFile())
-                continue;
+                if (sample == nullptr || ! sample->file.existsAsFile())
+                    continue;
 
-            const auto path = sample->file.getFullPathName();
+                const auto path = sample->file.getFullPathName();
 
-            if (seen.insert (path).second)
-                files.add (sample->file);
+                if (seen.insert (path).second)
+                    files.add (sample->file);
+            }
         }
     }
 

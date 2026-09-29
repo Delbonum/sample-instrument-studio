@@ -21,10 +21,10 @@ namespace
 
         for (const auto& track : zone.tracks)
         {
-            if (track.mute || (anySolo && ! track.solo) || ! track.hasClip())
+            if (track.mute || (anySolo && ! track.solo))
                 continue;
 
-            seconds = juce::jmax (seconds, (track.offset + track.clipLength()) * InstrumentModel::timelineSeconds);
+            seconds = juce::jmax (seconds, track.end() * InstrumentModel::timelineSeconds);
         }
 
         // Clips dürfen im Editor bis 128 s reichen; so lang darf dann auch der Bounce werden

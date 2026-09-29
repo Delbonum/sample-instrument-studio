@@ -133,6 +133,79 @@ int main()
         expectNear ("Fade-in wird nicht negativ", negative.fadeIn, 0.0);
     }
 
+    // Schere: zwei Stücke, die zusammen den alten Clip ergeben
+    {
+        auto clip = makeClip();          // 0,10 … 0,60
+        clip.trimStart = 0.2;
+        clip.trimEnd = 0.8;              // Länge 0,30 → 0,10 … 0,40
+        clip.fadeIn = 0.1;
+        clip.fadeOut = 0.2;
+
+        ClipState left, right;
+        expect ("Der Schnitt gelingt", sis::geometry::splitClip (clip, 0.25, left, right));
+        expectNear ("Links endet am Schnitt", left.end(), 0.25);
+        expectNear ("Rechts beginnt am Schnitt", right.offset, 0.25);
+        expectNear ("Rechts endet wie vorher", right.end(), clip.end());
+        expectNear ("Das Sample läuft über den Schnitt weiter", left.trimEnd, right.trimStart);
+        expectNear ("Mitten im Zuschnitt geschnitten", left.trimEnd, 0.5);
+        expectNear ("Der Fade-in bleibt in Sekunden", left.fadeIn * left.length(), clip.fadeIn * clip.length());
+        expectNear ("Der Fade-out bleibt in Sekunden", right.fadeOut * right.length(), clip.fadeOut * clip.length());
+        expectNear ("Innen keine Fades", left.fadeOut + right.fadeIn, 0.0);
+
+        expect ("Am Rand wird nicht geschnitten", ! sis::geometry::splitClip (clip, clip.offset + 0.0005, left, right));
+        expect ("Daneben auch nicht", ! sis::geometry::splitClip (clip, 0.9, left, right));
+    }
+
+    // Crossfade über die ganze Überschneidung
+    {
+        auto a = makeClip();             // 0,10 … 0,60
+        auto b = makeClip();
+        b.offset = 0.40;                 // 0,40 … 0,90 – überschneidet 0,40 … 0,60
+
+        expect ("Crossfade gelingt", sis::geometry::crossfade (b, a));   // Reihenfolge egal
+        expectNear ("Der frühere blendet über die Überschneidung aus", a.fadeOut * a.length(), 0.20);
+        expectNear ("Der spätere blendet über sie ein", b.fadeIn * b.length(), 0.20);
+
+        auto inner = makeClip();
+        inner.offset = 0.2;
+        inner.natural = 0.1;             // ganz in a
+        auto outer = makeClip();
+        expect ("Ein Clip ganz im anderen: kein Crossfade", ! sis::geometry::crossfade (outer, inner));
+
+        auto later = makeClip();
+        later.offset = 0.8;
+        auto early = makeClip();
+        expect ("Ohne Überschneidung: kein Crossfade", ! sis::geometry::crossfade (early, later));
+    }
+
+    // Überdeckung: der obere Clip verdeckt den unteren – außer in seinen Fades
+    {
+        using sis::geometry::Span;
+        const std::vector<Span> spans { { 0.0, 1.0, 0.0, 0.0 },     // unten
+                                        { 0.4, 0.6, 0.0, 0.0 } };   // oben, mittendrin
+
+        const auto lower = sis::geometry::audibleSegments (spans, 0, 1.0);
+        expect ("Der untere zerfällt in zwei Stücke", lower.size() == 2);
+        if (lower.size() == 2)
+        {
+            expectNear ("Erstes Stück bis zum oberen", lower[0].second, 0.4);
+            expectNear ("Zweites Stück ab seinem Ende", lower[1].first, 0.6);
+        }
+
+        const auto upper = sis::geometry::audibleSegments (spans, 1, 0.6);
+        expect ("Der obere klingt ganz", upper.size() == 1 && upper[0].first == 0.4 && upper[0].second == 0.6);
+
+        // Mit Fades scheint der untere in ihnen durch
+        const std::vector<Span> faded { { 0.0, 1.0, 0.0, 0.0 }, { 0.4, 0.6, 0.05, 0.05 } };
+        const auto through = sis::geometry::audibleSegments (faded, 0, 1.0);
+        expect ("Im Fade klingt der untere mit", through.size() == 2 && std::abs (through[0].second - 0.45) < 1.0e-9
+                                                    && std::abs (through[1].first - 0.55) < 1.0e-9);
+
+        // Schleife: bis zum nächsten Clip der Spur
+        expectNear ("Schleife endet am nächsten Clip", sis::geometry::loopUntil (spans, 0), 0.4);
+        expect ("Ohne Nachfolger läuft sie weiter", std::isinf (sis::geometry::loopUntil (spans, 1)));
+    }
+
     std::printf ("%d Prüfungen, %d Fehler\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

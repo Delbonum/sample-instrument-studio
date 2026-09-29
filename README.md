@@ -404,6 +404,7 @@ mit älteren Projektdateien, **y** neue Funktionen, **z** Fehlerbehebungen.
 
 | Version | Was dazugekommen ist |
 | --- | --- |
+| 1.12.0 | Beliebig viele Clips je Spur (der obere klingt, Überschneidungen schraffiert, X legt einen Crossfade); Clips und Spuren unabhängig wählbar, Shift für Mehrfachauswahl; Clips auf andere Spuren ziehen (unter die letzte: neue Spur); Entf löscht Clips, Spuren nur per Rechtsklick auf den Spurkopf; Strg+C/X/V am Locator, über mehrere Spuren hinweg (fehlende Spuren entstehen); Werkzeugleiste per gehaltenem Rechtsklick (Auswahl, Löschen, Schere); Locator auch im Sample-Editor; Menü-Kopfzeilen werden gezeichnet; Umlaute in Spur-Menü und EQ-Bändern korrigiert |
 | 1.11.0 | Drumset-Teile hinzufügen und entfernen (Becken, bis zu 5 Toms, Percussion), Spielweisen-Umschalter für HiHat, Snare und Ride; Samples aus dem Browser aufs Mapping und auf Spuren ziehen; Loop-Beginn und Überblendung für Sustain-Loop und Vor/Rückwärts (Schleifen pumpen nicht mehr an der Naht); Clip mit Entf entfernen, Spur per Rechtsklick löschen, Locator im Zeitlineal, waagerechtes Scrollen für Clips über 8 s |
 | 1.10.0 | Jeder interne Effekt auch als eigenständiges VST3, mit Presets; „+“-Menü zeigt eigene und installierte Plugins zusammen |
 | 1.9.0 | Zweite Mapping-Art: Drumset mit gezeichnetem Schlagzeug, Instrumentart in der Projektdatei |

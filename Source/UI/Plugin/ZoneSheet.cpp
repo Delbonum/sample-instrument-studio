@@ -140,7 +140,7 @@ void ZoneSheet::paintTrackRow (juce::Graphics& g, const Track& track, int index,
                 inner.removeFromRight (gainWidth), juce::Justification::centredRight, false);
     inner.removeFromRight (9);
 
-    if (const auto* sample = ctx.model.findSample (track.clip))
+    if (const auto* sample = track.clips.empty() ? nullptr : ctx.model.findSample (track.clips.front().sample))
         draw::waveBars (g, inner.withSizeKeepingCentre (inner.getWidth(), 20).toFloat(),
                         sample->peaks, 30, 1.0f, 0.08f,
                         track.mute ? colours::waveInactive : track.colour);

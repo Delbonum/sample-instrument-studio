@@ -24,6 +24,11 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    // Zwischenablage für die Clips (Strg+C / X / V aus der Shell)
+    void copyClips()  { trackArea.copyClips(); }
+    void cutClips()   { trackArea.cutClips(); }
+    void pasteClips() { trackArea.pasteClips(); }
+
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
 

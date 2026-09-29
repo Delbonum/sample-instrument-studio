@@ -169,6 +169,18 @@ void StudioLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectan
     g.drawText (text, r, juce::Justification::centredLeft, true);
 }
 
+void StudioLookAndFeel::drawPopupMenuSectionHeaderWithOptions (juce::Graphics& g, const juce::Rectangle<int>& area,
+                                                                const juce::String& sectionName,
+                                                                const juce::PopupMenu::Options&)
+{
+    /* Ohne eigene Zeichnung blieb die Kopfzeile eines Menüs leer: die Grundversion schreibt
+       in einer Farbe, die dieses Aussehen nie setzt. */
+    g.setColour (colours::textTertiary);
+    g.setFont (monoFont (10.0f, Weight::medium));
+    g.drawText (sectionName.toUpperCase(), area.reduced (menuPadX, 0).withTrimmedTop (4),
+                juce::Justification::centredLeft, true);
+}
+
 juce::Font StudioLookAndFeel::getPopupMenuFont()
 {
     return sansFont (12.0f);

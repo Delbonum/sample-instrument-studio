@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <limits>
 #include <vector>
 
 #include "PluginLibrary.h"
@@ -136,6 +137,12 @@ struct LayerPlan
     LoopMode loop = LoopMode::oneShot;
     double loopStartSamples = 0.0;      // Beginn der Schleife, gezählt ab Beginn des Ausschnitts
     double loopCrossfadeSamples = 0.0;  // Überblendung an der Naht; höchstens die halbe Schleife
+
+    /** Wann die Schicht zu hören ist, in Sekunden ab Beginn des Clips. Außerhalb liegt
+        ein anderer Clip derselben Spur darüber. Ein Clip mit Überdeckung wird so in
+        mehrere Schichten zerlegt, eine je hörbarem Abschnitt. */
+    double gateStartSeconds = 0.0;
+    double gateEndSeconds = std::numeric_limits<double>::infinity();
 
     double getRegionLength() const noexcept { return endSample - startSample; }
 };

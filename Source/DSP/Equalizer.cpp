@@ -8,7 +8,7 @@ juce::String toDisplayString (BandType type)
     {
         case BandType::lowShelf:  return "Tiefen-Kuhschwanz";
         case BandType::peak:      return "Glocke";
-        case BandType::highShelf: return "Höhen-Kuhschwanz";
+        case BandType::highShelf: return juce::String::fromUTF8 ("Höhen-Kuhschwanz");
         case BandType::highPass:  return "Hochpass";
         case BandType::lowPass:   return "Tiefpass";
     }

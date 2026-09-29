@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 # Die Programmversion wird hier gepflegt - und nur hier. JUCE macht daraus
 # JucePlugin_VersionString, das Source/Version.h weiterreicht.
-project(SampleInstrumentStudio VERSION 1.11.0 LANGUAGES C CXX)
+project(SampleInstrumentStudio VERSION 1.12.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -99,6 +99,7 @@ target_sources(SampleInstrumentStudio PRIVATE
     Source/UI/Export/ExportView.cpp
     Source/UI/Editor/EditorView.cpp
     Source/UI/Editor/TrackArea.cpp
+    Source/UI/Editor/ToolPalette.cpp
     Source/UI/Editor/SampleEditor.cpp
     Source/UI/Mapping/MappingView.cpp
     Source/UI/Mapping/ZoneGrid.cpp

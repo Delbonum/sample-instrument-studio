@@ -265,6 +265,9 @@ void SamplerVoice::start (RenderPlan::Ptr plan, const ZonePlan& zone, int midiNo
         state.outputPosition = 0.0;
         state.finished = false;
         state.delay = layer.delaySeconds * sampleRate;
+        state.gateStart = juce::jmax (0.0, layer.gateStartSeconds) * sampleRate;
+        state.gateEnd = std::isfinite (layer.gateEndSeconds) ? layer.gateEndSeconds * sampleRate
+                                                             : std::numeric_limits<double>::infinity();
 
         /* Tonhöhe: Abstand zum Grundton, Spur-Tonhöhe und Cent, dazu die Samplerate des
            Samples. Beim Drumset entfällt der Abstand zur Taste – die Spur-Tonhöhe wirkt
@@ -274,6 +277,15 @@ void SamplerVoice::start (RenderPlan::Ptr plan, const ZonePlan& zone, int midiNo
         const double sampleRateRatio = layer.sample != nullptr ? layer.sample->sourceSampleRate / sampleRate : 1.0;
         state.ratio = std::pow (2.0, semitones / 12.0) * sampleRateRatio;
         state.timeRatio = state.ratio / juce::jmax (0.25, layer.stretch);
+
+        /* Ein Abschnitt, der erst später hörbar wird, beginnt gleich dort – das Sample läuft
+           innerlich weiter, als hätte es von Anfang an geklungen. */
+        if (state.gateStart > 0.0)
+        {
+            state.delay += state.gateStart;
+            state.outputPosition = state.gateStart;
+            state.position = state.gateStart * state.timeRatio;
+        }
 
         /* Wiedergabe ab dem Locator: was vor ihm liegt, wird übersprungen – erst der
            Versatz der Spur, dann der Anfang des Samples. */
@@ -287,8 +299,8 @@ void SamplerVoice::start (RenderPlan::Ptr plan, const ZonePlan& zone, int midiNo
             {
                 const double into = skip - state.delay;
                 state.delay = 0.0;
-                state.outputPosition = into;
-                state.position = into * state.timeRatio;
+                state.outputPosition += into;
+                state.position += into * state.timeRatio;
             }
         }
     }
@@ -356,6 +368,13 @@ void SamplerVoice::render (juce::AudioBuffer<float>& buses, int startSample, int
                 continue;
             }
 
+            // Ab hier liegt ein anderer Clip der Spur darüber
+            if (state.outputPosition >= state.gateEnd)
+            {
+                state.finished = true;
+                continue;
+            }
+
             float sampleLeft = 0.0f, sampleRight = 0.0f;
             readLayer (state, sampleLeft, sampleRight);
 
@@ -375,6 +394,16 @@ void SamplerVoice::render (juce::AudioBuffer<float>& buses, int startSample, int
                 if (toEnd < layer.fadeOutSamples)
                     fade *= (float) juce::jmax (0.0, toEnd / layer.fadeOutSamples);
             }
+
+            /* An den Kanten eines Abschnitts (dort, wo ein anderer Clip übernimmt) kurz
+               blenden statt hart schneiden – sonst knackt es. */
+            const double edge = 0.003 * sampleRate;
+
+            if (state.gateStart > 0.0 && state.outputPosition - state.gateStart < edge)
+                fade *= (float) juce::jlimit (0.0, 1.0, (state.outputPosition - state.gateStart) / edge);
+
+            if (std::isfinite (state.gateEnd) && state.gateEnd - state.outputPosition < edge)
+                fade *= (float) juce::jlimit (0.0, 1.0, (state.gateEnd - state.outputPosition) / edge);
 
             // Jede Spur hat ihren eigenen Signalweg, damit Effekte darauf wirken können
             const int busChannel = 2 * juce::jlimit (0, numBusChannels / 2 - 1, layer.busIndex);

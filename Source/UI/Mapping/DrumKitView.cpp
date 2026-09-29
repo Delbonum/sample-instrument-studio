@@ -324,7 +324,7 @@ void DrumKitView::paintPiece (juce::Graphics& g, const Placed& placed) const
     if (roomForSample)
     {
         const auto* track = zone->getSelectedTrack();
-        const auto clip = track != nullptr && track->hasClip() ? track->clip : juce::String();
+        const auto clip = track != nullptr && track->hasClips() ? track->clips.front().sample : juce::String();
 
         g.setColour (colours::textSecondary);
         g.drawText (clip, text, juce::Justification::centred, true);

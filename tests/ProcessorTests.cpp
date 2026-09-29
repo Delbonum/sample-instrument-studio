@@ -77,7 +77,8 @@ int main()
 
     juce::ScopedJuceInitialiser_GUI juceInit;
 
-    sis::StudioProcessor processor;
+    auto processorOwner = std::make_unique<sis::StudioProcessor>();   // auf dem Heap: mehrere Prozessoren sprengen sonst den Stack
+    auto& processor = *processorOwner;
     processor.prepareToPlay (sampleRate, blockSize);
 
     expect ("Startet mit Beispielzonen", ! processor.getModel().zones.empty());
@@ -99,7 +100,7 @@ int main()
     auto& zone = processor.getModel().zones.front();
     sis::Track track;
     track.name = "Test";
-    track.clip = file.getFileName();
+    { sis::Clip piece; piece.sample = file.getFileName(); track.clips.push_back (piece); }
     track.gain = 1.0f;
     track.loop = sis::LoopMode::sustainLoop;
     zone.tracks.push_back (track);
@@ -152,7 +153,8 @@ int main()
     // --- Verlauf: Aenderungen zuruecknehmen und wiederholen ------------------------
     section ("Verlauf: Aenderungen zuruecknehmen und wiederholen");
     {
-        sis::StudioProcessor undoTest;
+        auto undoTestOwner = std::make_unique<sis::StudioProcessor>();   // auf dem Heap: mehrere Prozessoren sprengen sonst den Stack
+        auto& undoTest = *undoTestOwner;
         undoTest.prepareToPlay (sampleRate, blockSize);
         undoTest.getModel().importSamples (files, undoTest.getFormatManager());
 
@@ -178,7 +180,7 @@ int main()
 
         sis::Track newTrack;
         newTrack.name = "Zum Zuruecknehmen";
-        newTrack.clip = file.getFileName();
+        { sis::Clip piece; piece.sample = file.getFileName(); newTrack.clips.push_back (piece); }
         firstZone.tracks.push_back (newTrack);
         commit();
 
@@ -304,7 +306,8 @@ int main()
 
         if (auto xml = juce::XmlDocument::parse (movedProject))
         {
-            sis::StudioProcessor loaded;
+            auto loadedOwner = std::make_unique<sis::StudioProcessor>();   // auf dem Heap: mehrere Prozessoren sprengen sonst den Stack
+            auto& loaded = *loadedOwner;
             expect ("Exportiertes Projekt laedt",
                     loaded.loadProjectState (juce::ValueTree::fromXml (*xml), moved));
             loaded.getModel().sendSynchronousChangeMessage();
@@ -485,7 +488,8 @@ int main()
                 // Und das mitgelieferte Instrument laedt auch wirklich
                 if (auto xml = juce::XmlDocument::parse (bundled))
                 {
-                    sis::StudioProcessor player;
+                    auto playerOwner = std::make_unique<sis::StudioProcessor>();   // auf dem Heap: mehrere Prozessoren sprengen sonst den Stack
+                    auto& player = *playerOwner;
                     player.prepareToPlay (sampleRate, blockSize);
 
                     expect ("Die App koennte das Instrument laden",
@@ -684,14 +688,15 @@ int main()
                     // --- Und jetzt derselbe Effekt im echten Prozessor ----------------
                     // Der Prozessor liest die Plugin-Liste beim Anlegen, deshalb ein frischer.
                     {
-                        sis::StudioProcessor host;
+                        auto hostOwner = std::make_unique<sis::StudioProcessor>();   // auf dem Heap: mehrere Prozessoren sprengen sonst den Stack
+                        auto& host = *hostOwner;
                         host.prepareToPlay (sampleRate, blockSize);
                         host.getModel().importSamples (files, host.getFormatManager());
 
                         auto& hostZone = host.getModel().zones.front();
                         sis::Track hostTrack;
                         hostTrack.name = "Mit fremdem Effekt";
-                        hostTrack.clip = file.getFileName();
+                        { sis::Clip piece; piece.sample = file.getFileName(); hostTrack.clips.push_back (piece); }
                         hostTrack.gain = 1.0f;
                         hostTrack.loop = sis::LoopMode::sustainLoop;
                         hostTrack.effects.push_back (sis::Effect::makeExternal ("SIS Equalizer", identifier));
@@ -784,14 +789,15 @@ int main()
                     // --- Bounce: die Effekte wandern fest ins Sample ------------------
                     section ("Bounce: die Effekte wandern fest ins Sample");
                     {
-                        sis::StudioProcessor bouncer;
+                        auto bouncerOwner = std::make_unique<sis::StudioProcessor>();   // auf dem Heap: mehrere Prozessoren sprengen sonst den Stack
+                        auto& bouncer = *bouncerOwner;
                         bouncer.prepareToPlay (sampleRate, blockSize);
                         bouncer.getModel().importSamples (files, bouncer.getFormatManager());
 
                         auto& zoneToBounce = bouncer.getModel().zones.front();
                         sis::Track loudTrack;
                         loudTrack.name = "Vor dem Bounce";
-                        loudTrack.clip = file.getFileName();
+                        { sis::Clip piece; piece.sample = file.getFileName(); loudTrack.clips.push_back (piece); }
                         loudTrack.gain = 1.0f;
                         loudTrack.loop = sis::LoopMode::oneShot;
                         loudTrack.effects.push_back (sis::Effect::makeExternal ("SIS Equalizer", identifier));
@@ -868,7 +874,8 @@ int main()
                             if (bounced.tracks.size() == 1)
                             {
                                 expect ("Die Spur zeigt auf die gerenderte Datei",
-                                        bounced.tracks.front().clip == outcome.file.getFileName());
+                                        bounced.tracks.front().clips.size() == 1
+                                        && bounced.tracks.front().clips.front().sample == outcome.file.getFileName());
                                 expect ("Die Effektkette ist leer", bounced.tracks.front().effects.empty());
                                 expect ("Das fremde Plugin wird nicht mehr gehalten",
                                         bouncer.findHostedPlugin (bounced.id, 0, identifier) == nullptr);

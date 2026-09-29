@@ -1,4 +1,5 @@
 #include "RenderPlan.h"
+#include "../Model/ClipGeometry.h"
 
 namespace sis
 {
@@ -523,51 +524,107 @@ RenderPlan::Ptr buildRenderPlan (const InstrumentModel& model, const SampleCache
         const bool anySolo = std::any_of (zone.tracks.begin(), zone.tracks.end(),
                                           [] (const Track& t) { return t.solo; });
 
-        for (const auto& track : zone.tracks)
+        for (int trackIndex = 0; trackIndex < (int) zone.tracks.size(); ++trackIndex)
         {
+            const auto& track = zone.tracks[(size_t) trackIndex];
+
             if (track.mute || (anySolo && ! track.solo))
                 continue;
 
-            auto sample = cache.get (track.clip);
+            /* Die Clips der Spur als Strecken: daraus folgt, wo jeder zu hören ist. Clips
+               ohne Sample verdecken nichts. */
+            std::vector<geometry::Span> spans;
 
-            if (sample == nullptr || sample->getNumSamples() < 2)
-                continue;
+            for (const auto& clip : track.clips)
+            {
+                if (! clip.hasSample())
+                {
+                    spans.push_back ({ clip.offset, clip.offset, 0.0, 0.0 });
+                    continue;
+                }
 
-            const double total = (double) sample->getNumSamples();
-            const double start = juce::jlimit (0.0, total - 1.0, track.trimStart * total);
-            const double end = juce::jlimit (start + 1.0, total, track.trimEnd * total);
-            const double region = end - start;
+                const double length = clip.length();
+                spans.push_back ({ clip.offset, clip.end(), clip.fadeIn * length, clip.fadeOut * length });
+            }
 
-            LayerPlan layer;
-            layer.sample = sample;
-            layer.busIndex = (int) plan->buses.size();
-            plan->buses.push_back (buildEffects (track, sampleRate, hostedPlugins, zone.id,
-                                                 (int) (&track - zone.tracks.data())));
-            layer.delaySeconds = track.offset * InstrumentModel::timelineSeconds;
-            layer.startSample = start;
-            layer.endSample = end;
-            layer.fadeInSamples = juce::jlimit (0.0, region, track.fadeIn * region);
-            layer.fadeOutSamples = juce::jlimit (0.0, region - layer.fadeInSamples, track.fadeOut * region);
-            layer.reverse = track.reverse;
-            layer.loop = track.loop;
+            const bool looping = track.loop != LoopMode::oneShot;
+            int busIndex = -1;
 
-            /* Die Schleife braucht mindestens zwei Samples, und die Überblendung darf
-               höchstens die halbe Schleife lang sein: sie nimmt von beiden Enden. */
-            layer.loopStartSamples = juce::jlimit (0.0, juce::jmax (0.0, region - 2.0), track.loopStart * region);
-            const double loopLength = region - layer.loopStartSamples;
-            layer.loopCrossfadeSamples = juce::jlimit (0.0, juce::jmax (0.0, loopLength * 0.5 - 1.0),
-                                                       track.loopCrossfade * loopLength);
-            layer.stretch = juce::jlimit (0.25, 4.0, track.stretch);
-            layer.grainSamples = grainSizeFor (track.algorithm);
-            layer.semitoneOffset = (double) track.pitch + ((double) track.cents - 0.5);
+            for (size_t clipIndex = 0; clipIndex < track.clips.size(); ++clipIndex)
+            {
+                const auto& clip = track.clips[clipIndex];
 
-            // Panorama mit 0 dB in der Mitte: der angezeigte Spurpegel ist auch der gehörte,
-            // und beim Schwenken wird nichts angehoben.
-            const double pan = juce::jlimit (-1.0f, 1.0f, track.pan);
-            layer.gainLeft = (float) (track.gain * juce::jmin (1.0, 1.0 - pan));
-            layer.gainRight = (float) (track.gain * juce::jmin (1.0, 1.0 + pan));
+                if (! clip.hasSample())
+                    continue;
 
-            zonePlan.layers.push_back (std::move (layer));
+                auto sample = cache.get (clip.sample);
+
+                if (sample == nullptr || sample->getNumSamples() < 2)
+                    continue;
+
+                const auto& span = spans[clipIndex];
+                const double until = looping ? geometry::loopUntil (spans, clipIndex) : span.end;
+                const auto segments = geometry::audibleSegments (spans, clipIndex, until);
+
+                if (segments.empty())
+                    continue;
+
+                // Ein Signalweg je Spur, gemeinsam für alle ihre Clips
+                if (busIndex < 0)
+                {
+                    busIndex = (int) plan->buses.size();
+                    plan->buses.push_back (buildEffects (track, sampleRate, hostedPlugins, zone.id, trackIndex));
+                }
+
+                const double total = (double) sample->getNumSamples();
+                const double start = juce::jlimit (0.0, total - 1.0, clip.trimStart * total);
+                const double end = juce::jlimit (start + 1.0, total, clip.trimEnd * total);
+                const double region = end - start;
+
+                LayerPlan layer;
+                layer.sample = sample;
+                layer.busIndex = busIndex;
+                layer.delaySeconds = clip.offset * InstrumentModel::timelineSeconds;
+                layer.startSample = start;
+                layer.endSample = end;
+                layer.fadeInSamples = juce::jlimit (0.0, region, clip.fadeIn * region);
+                layer.fadeOutSamples = juce::jlimit (0.0, region - layer.fadeInSamples, clip.fadeOut * region);
+                layer.reverse = track.reverse;
+                layer.loop = track.loop;
+
+                /* Schleife und Überblendung beziehen sich auf den **gespielten** Ausschnitt
+                   des Clips, nicht auf das ganze Sample. Die Schleife braucht mindestens
+                   zwei Samples, und die Überblendung darf höchstens die halbe Schleife lang
+                   sein: sie nimmt von beiden Enden. */
+                layer.loopStartSamples = juce::jlimit (0.0, juce::jmax (0.0, region - 2.0), track.loopStart * region);
+                const double loopLength = region - layer.loopStartSamples;
+                layer.loopCrossfadeSamples = juce::jlimit (0.0, juce::jmax (0.0, loopLength * 0.5 - 1.0),
+                                                           track.loopCrossfade * loopLength);
+                layer.stretch = juce::jlimit (0.25, 4.0, clip.stretch);
+                layer.grainSamples = grainSizeFor (track.algorithm);
+                layer.semitoneOffset = (double) track.pitch + ((double) track.cents - 0.5);
+
+                // Panorama mit 0 dB in der Mitte: der angezeigte Spurpegel ist auch der gehörte,
+                // und beim Schwenken wird nichts angehoben.
+                const double pan = juce::jlimit (-1.0f, 1.0f, track.pan);
+                layer.gainLeft = (float) (track.gain * juce::jmin (1.0, 1.0 - pan));
+                layer.gainRight = (float) (track.gain * juce::jmin (1.0, 1.0 + pan));
+
+                /* Je hörbarem Abschnitt eine Schicht. Was darüberliegende Clips verdecken,
+                   bleibt still; ein Abschnitt, der am natürlichen Clip-Ende endet, braucht
+                   kein eigenes Ende. */
+                for (const auto& [from, to] : segments)
+                {
+                    auto part = layer;
+                    part.gateStartSeconds = (from - clip.offset) * InstrumentModel::timelineSeconds;
+
+                    const bool naturalEnd = ! std::isfinite (to) || (! looping && to >= span.end - 1.0e-12);
+                    part.gateEndSeconds = naturalEnd ? std::numeric_limits<double>::infinity()
+                                                     : (to - clip.offset) * InstrumentModel::timelineSeconds;
+
+                    zonePlan.layers.push_back (std::move (part));
+                }
+            }
         }
 
         plan->zones.push_back (std::move (zonePlan));

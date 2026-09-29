@@ -92,7 +92,7 @@ void ontoNote (StudioContext& ctx, int note, int velocity, int sampleIndex)
     zone.name = sample->name.upToLastOccurrenceOf (".", false, false);
     model.addSampleTrack (zone, *sample);
 
-    ctx.toast ("Neue Zone "_u + zone.name + " · " + noteName (zone.lowNote) + "–"_u + noteName (zone.highNote));
+    ctx.toast ("Neue Zone "_u + zone.name + " · "_u + noteName (zone.lowNote) + "–"_u + noteName (zone.highNote));
 }
 
 void intoDrumPart (StudioContext& ctx, const DrumPart& part, int sampleIndex)

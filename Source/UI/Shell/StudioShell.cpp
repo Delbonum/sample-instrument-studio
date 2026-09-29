@@ -278,7 +278,12 @@ void StudioShell::mouseDown (const juce::MouseEvent& e)
     const bool inTextEditor = dynamic_cast<juce::TextEditor*> (source) != nullptr
                               || (source != nullptr && source->findParentComponentOfClass<juce::TextEditor>() != nullptr);
 
-    if (! inTextEditor && ! hasKeyboardFocus (false))
+    /* Eine Komponente, die selbst Tasten braucht (die Spuren im Editor für Entf, X und die
+       Zwischenablage), behält ihren Fokus. Früher holte sich die Shell ihn bei jedem Klick
+       zurück – dann kam Entf im Editor nur an, wenn die Reihenfolge zufällig passte. */
+    const bool wantsKeys = dynamic_cast<TrackArea*> (source) != nullptr;
+
+    if (! inTextEditor && ! wantsKeys && ! hasKeyboardFocus (false))
         grabKeyboardFocus();
 }
 
@@ -432,9 +437,9 @@ void StudioShell::getCommandInfo (juce::CommandID id, juce::ApplicationCommandIn
             info.addDefaultKeypress ('y', ctrl);
             info.setActive (processor.getHistory().canRedo());
             break;
-        case cmd::cut:              set ("Ausschneiden", "Bearbeiten");             break;
-        case cmd::copy:             set ("Kopieren", "Bearbeiten");                 break;
-        case cmd::paste:            set ("Einfügen"_u, "Bearbeiten");                break;
+        case cmd::cut:              set ("Ausschneiden", "Bearbeiten");             info.addDefaultKeypress ('x', ctrl); break;
+        case cmd::copy:             set ("Kopieren", "Bearbeiten");                 info.addDefaultKeypress ('c', ctrl); break;
+        case cmd::paste:            set ("Einfügen"_u, "Bearbeiten");                info.addDefaultKeypress ('v', ctrl); break;
         case cmd::trimToSelection:  set ("Auf Auswahl zuschneiden", "Bearbeiten");  break;
 
         case cmd::showMapping:      set ("Mapping", "Ansicht");                     info.addDefaultKeypress (KP::F2Key, 0); break;
@@ -539,31 +544,39 @@ bool StudioShell::perform (const InvocationInfo& info)
             break;
         }
 
+        // Die Zwischenablage gilt den Clips im Editor
         case cmd::cut:
         case cmd::copy:
         case cmd::paste:
-            notYet ("folgt mit dem Editor");
+            if (ui.view != View::editor)
+            {
+                showToast ("Ausschneiden, Kopieren und Einfügen gelten den Clips im Editor"_u);
+                break;
+            }
+
+            if (info.commandID == cmd::copy)       editorView.copyClips();
+            else if (info.commandID == cmd::cut)   editorView.cutClips();
+            else                                   editorView.pasteClips();
             break;
 
         case cmd::trimToSelection:
         {
-            auto* zone = processor.getModel().getSelectedZone();
-            auto* track = zone != nullptr ? zone->getSelectedTrack() : nullptr;
+            auto* clip = currentClip (processor.getModel(), ui);
 
-            if (track == nullptr)
+            if (clip == nullptr)
             {
-                showToast ("Keine Spur gewählt"_u);
+                showToast ("Kein Clip gewählt"_u);
                 break;
             }
 
             const double a = juce::jmin (ui.selectionStart, ui.selectionEnd);
             const double b = juce::jmax (ui.selectionEnd, a + 0.02);
             processor.getHistory().nameNextStep ("Auf Auswahl zugeschnitten"_u);
-            track->trimStart = a;
-            track->trimEnd = b;
+            clip->trimStart = a;
+            clip->trimEnd = b;
             processor.getModel().notifyChanged();
             setView (View::editor);
-            showToast ("Clip auf Auswahl zugeschnitten · "_u + track->name);
+            showToast ("Clip auf Auswahl zugeschnitten · "_u + clip->sample);
             break;
         }
 

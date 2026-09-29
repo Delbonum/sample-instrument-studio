@@ -550,7 +550,7 @@ TrackInspectorContent::TrackInspectorContent (StudioContext& c) : ctx (c)
     resetStretchButton.onClick = [this]
     {
         ctx.step ("Dehnung zurückgesetzt"_u);
-        if (auto* t = getTrack()) { t->stretch = 1.0; ctx.model.notifyChanged(); }
+        if (auto* c = currentClip (ctx.model, ctx.ui)) { c->stretch = 1.0; ctx.model.notifyChanged(); }
     };
 
     reverseButton.onClick = [this]
@@ -1084,10 +1084,13 @@ void TrackInspectorContent::paint (juce::Graphics& g)
     value (panText (track->pan), panValue);
     label ("FADES", fadeLabel);
 
-    const double clipSeconds = track->clipLength() * InstrumentModel::timelineSeconds;
+    // Fades, Dehnung und Loop-Werte in Sekunden gelten dem gewählten Clip der Spur
+    const auto* clip = currentClip (ctx.model, ctx.ui);
+    const double clipSeconds = clip != nullptr ? clip->length() * InstrumentModel::timelineSeconds : 0.0;
     g.setColour (colours::textSecondary);
     g.setFont (monoFont (11.0f));
-    g.drawText (juce::String (clipSeconds * track->fadeIn, 2) + " s / " + juce::String (clipSeconds * track->fadeOut, 2) + " s",
+    g.drawText (clip == nullptr ? juce::String ("kein Clip")
+                                : juce::String (clipSeconds * clip->fadeIn, 2) + " s / " + juce::String (clipSeconds * clip->fadeOut, 2) + " s",
                 fadeValue, juce::Justification::centredLeft, true);
 
     // Tonhöhe & Zeit
@@ -1117,7 +1120,7 @@ void TrackInspectorContent::paint (juce::Graphics& g)
 
     g.setColour (colours::text);
     g.setFont (monoFont (12.0f));
-    g.drawText (juce::String (track->stretch, 2) + juce::String::fromUTF8 ("×"), stretchValue,
+    g.drawText (juce::String (clip != nullptr ? clip->stretch : 1.0, 2) + juce::String::fromUTF8 ("×"), stretchValue,
                 juce::Justification::centredLeft, false);
 
     // Loop-Beginn in Sekunden des Clips, Überblendung in Millisekunden
@@ -1177,6 +1180,7 @@ void TrackInspector::changeListenerCallback (juce::ChangeBroadcaster*)
 {
     resized();
     repaint();
+    content.repaint();   // ein anderer Clip gewählt: Fades und Dehnung zeigen dessen Werte
 }
 
 void TrackInspector::paint (juce::Graphics& g)

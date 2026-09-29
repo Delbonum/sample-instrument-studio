@@ -133,10 +133,10 @@ void ZoneGrid::paint (juce::Graphics& g)
                 {
                     for (int i = 0; i < (int) z.tracks.size(); ++i)
                     {
-                        if (! z.tracks[(size_t) i].hasClip())
+                        if (! z.tracks[(size_t) i].hasClips())
                             continue;
 
-                        const auto peaks = model.waveformFor (z.tracks[(size_t) i], i);
+                        const auto peaks = model.waveformFor (z.tracks[(size_t) i].clips.front(), i);
                         auto wave = r.reduced (8.0f, 0.0f);
                         wave = wave.removeFromBottom (juce::jmin (22.0f, r.getHeight() * 0.3f)).withTrimmedBottom (5.0f);
                         const int bars = juce::jlimit (4, 60, juce::roundToInt (wave.getWidth() / 3.0f));
@@ -249,7 +249,7 @@ void ZoneGrid::itemDropped (const SourceDetails& details)
         int clips = 0;
         for (const auto& z : model.zones)
             for (const auto& t : z.tracks)
-                clips += t.hasClip() ? 1 : 0;
+                clips += (int) t.clips.size();
         return clips;
     };
 

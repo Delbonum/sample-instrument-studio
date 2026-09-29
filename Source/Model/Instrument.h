@@ -121,15 +121,17 @@ struct Effect
 
 struct SampleFile;
 
-/** Eine Spur (Layer) innerhalb einer Zone.
-    Zeitwerte (offset, natural, Clip-Länge) sind Anteile der 8-Sekunden-Achse,
-    trim und fades Anteile des Samples bzw. des Clips. */
-struct Track
+/** Ein Stück Sample auf der Zeitachse einer Spur.
+
+    Zeitwerte (offset, natural, Länge) sind Anteile der 8-Sekunden-Achse, trim ist ein
+    Anteil des Samples, die Fades Anteile der Clip-Länge.
+
+    Eine Spur kann beliebig viele Clips tragen. Wo sie sich überlappen, klingt nur der
+    obere – der, der in `Track::clips` weiter hinten steht, also zuletzt gesetzt wurde.
+    Nur in seinen Fades scheint der untere durch: so entsteht ein Crossfade (Taste X). */
+struct Clip
 {
-    juce::String name { "Spur" };
-    juce::String clip;      // Name des Samples; leer = kein Clip auf der Spur
-    juce::Colour colour { 0xff6e6b66 };
-    juce::Colour softColour { 0xffefeeea };
+    juce::String sample;    // Name des Samples in `InstrumentModel::samples`
     WaveShape shape = WaveShape::air;
 
     double offset = 0.0;
@@ -140,6 +142,33 @@ struct Track
     double fadeIn = 0.0;
     double fadeOut = 0.0;
 
+    /** Kennung zur Laufzeit, für Auswahl und Ziehen. Steht nicht in der Datei: nach dem
+        Laden (und nach Rückgängig) bekommt jeder Clip eine neue. */
+    juce::uint32 uid = nextUid();
+
+    double length() const noexcept { return natural * stretch * (trimEnd - trimStart); }
+    double end() const noexcept    { return offset + length(); }
+
+    /** Ob ein Sample dahinter steht. „leer“ war früher der Platzhalter einer leeren Spur
+        und steht noch in alten Projektdateien. */
+    bool hasSample() const { return sample.isNotEmpty() && sample != "leer"; }
+
+    /** Neuer Clip aus einem Sample, ungeschnitten und ohne Fades. */
+    static Clip fromSample (const SampleFile&, double offset);
+
+    static juce::uint32 nextUid() noexcept;
+};
+
+/** Eine Spur (Layer) innerhalb einer Zone: Pegel, Tonhöhe, Loop-Verhalten und
+    Effektkette gelten für alle ihre Clips. */
+struct Track
+{
+    juce::String name { "Spur" };
+    juce::Colour colour { 0xff6e6b66 };
+    juce::Colour softColour { 0xffefeeea };
+
+    std::vector<Clip> clips;   // Reihenfolge = Stapel: der letzte liegt oben
+
     float gain = 0.5f;
     float pan = 0.0f;       // -1 … +1
     int pitch = 0;          // Halbtöne, -24 … +24
@@ -147,10 +176,11 @@ struct Track
     bool reverse = false;
     LoopMode loop = LoopMode::oneShot;
 
-    /** Nur bei Sustain-Loop und Vor/Rückwärts, beides als Anteil des Ausschnitts:
-        ab wo geloopt wird (davor liegt der Anschlag, der nur einmal klingt) und wie lang
-        an der Nahtstelle übergeblendet wird. Ohne Überblendung ist die Naht hörbar,
-        sobald Anfang und Ende der Schleife nicht zufällig zusammenpassen. */
+    /** Nur bei Sustain-Loop und Vor/Rückwärts, beides als Anteil des **gespielten**
+        Ausschnitts eines Clips (nach dem Zuschnitt): ab wo geloopt wird (davor liegt der
+        Anschlag, der nur einmal klingt) und wie lang an der Nahtstelle übergeblendet wird.
+        Ohne Überblendung ist die Naht hörbar, sobald Anfang und Ende der Schleife nicht
+        zufällig zusammenpassen. Eine Schleife klingt bis zum nächsten Clip der Spur. */
     double loopStart = 0.0;
     double loopCrossfade = 0.0;
 
@@ -160,15 +190,18 @@ struct Track
 
     std::vector<Effect> effects;
 
-    double clipLength() const noexcept { return natural * stretch * (trimEnd - trimStart); }
+    bool hasClips() const;
 
-    /** Ob auf der Spur ein Sample liegt. Eine leere Spur hat keinen Clip – „leer“ war
-        früher der Platzhalter dafür und steht noch in alten Projektdateien. */
-    bool hasClip() const { return clip.isNotEmpty() && clip != "leer"; }
+    /** Clip mit dieser Kennung, sonst nullptr. */
+    Clip* findClip (juce::uint32 uid);
+    const Clip* findClip (juce::uint32 uid) const;
 
-    /** Legt ein Sample als Clip auf die Spur, ab `offset` auf der Zeitachse. Zuschnitt,
-        Dehnung und Fades beginnen neu – sie gehörten zum vorigen Sample. */
-    void placeSample (const SampleFile&, double offset);
+    /** Wo der letzte Clip endet (0 ohne Clips). */
+    double end() const;
+
+    /** Legt ein Sample als neuen, obersten Clip auf die Spur. Heißt die Spur noch wie
+        vergeben („Spur 2“), bekommt sie den Namen des Samples. */
+    Clip& addSample (const SampleFile&, double offset);
 };
 
 /** Tastatur-Zone: Tastenbereich × Velocity-Bereich, mit eigenen Spuren. */
@@ -201,6 +234,9 @@ struct Zone
 
     /** Wo der letzte Clip endet, in Anteilen der Zeitachse (0, wenn es keinen gibt). */
     double contentEnd() const;
+
+    /** Die Spur, auf der ein Clip liegt, sonst -1. */
+    int trackOfClip (juce::uint32 uid) const;
 };
 
 /** Name eines Makros, wie er in beiden Ansichten steht. */
@@ -319,8 +355,8 @@ public:
     Zone* findZone (const juce::String& id);
     const SampleFile* findSample (const juce::String& fileName) const;
 
-    /** Wellenform einer Spur: echte Spitzenwerte, sonst Platzhalter aus der Form. */
-    std::vector<float> waveformFor (const Track&, int trackIndex) const;
+    /** Wellenform eines Clips: echte Spitzenwerte, sonst Platzhalter aus der Form. */
+    std::vector<float> waveformFor (const Clip&, int seed) const;
 
     /** Erste Zone, die Note (und, wenn velocity >= 0, Velocity) enthält. */
     const Zone* findZoneForNote (int note, int velocity = -1) const;
@@ -369,8 +405,8 @@ public:
         die gelöschte Spur fallen weg, die dahinter rücken nach. */
     void removeTrack (Zone&, int trackIndex);
 
-    /** Legt ein Sample als Spur in die Zone. Hat die Zone eine leere Spur, bekommt die das
-        Sample, statt dass eine weitere dazukommt. Gibt die Nummer der Spur zurück. */
+    /** Legt ein Sample als Spur in die Zone. Hat die Zone eine Spur ohne Clips, bekommt die
+        das Sample, statt dass eine weitere dazukommt. Gibt die Nummer der Spur zurück. */
     int addSampleTrack (Zone&, const SampleFile&);
 
     /** Neue Zone um eine Taste herum: so breit, wie Platz ist (höchstens eine Oktave),

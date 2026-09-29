@@ -29,7 +29,7 @@ namespace sis
 class SamplerVoice
 {
 public:
-    static constexpr int maxLayers = 16;
+    static constexpr int maxLayers = 64;   // mehrere Clips je Spur, teils in Abschnitten
 
     void prepare (double sampleRate);
     /** `skipSeconds`: so weit hinten auf der Zeitachse beginnen (Wiedergabe ab dem Locator). */
@@ -52,6 +52,8 @@ private:
         double ratio = 1.0;           // Abspielgeschwindigkeit für die Tonhöhe
         double timeRatio = 1.0;       // Fortschritt im Sample je ausgegebenem Sample (ratio / stretch)
         double delay = 0.0;           // verbleibender Versatz in Samples
+        double gateStart = 0.0;       // ab hier hörbar (in outputPosition gemessen) …
+        double gateEnd = 0.0;         // … und bis hier; unendlich = bis zum Ende
         bool finished = false;
     };
 

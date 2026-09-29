@@ -7,6 +7,7 @@
 #include "../Source/DSP/Compressor.h"
 #include "../Source/DSP/Equalizer.h"
 #include "../Source/Audio/SamplerEngine.h"
+#include "../Source/Model/ClipGeometry.h"
 #include "../Source/Model/Instrument.h"
 #include "../Source/Model/PresetLibrary.h"
 
@@ -112,7 +113,9 @@ sis::Track makeTrack (const juce::String& clip)
 {
     sis::Track track;
     track.name = clip;
-    track.clip = clip;
+    sis::Clip piece;
+    piece.sample = clip;
+    track.clips.push_back (piece);
     track.gain = 1.0f;
     track.pan = 0.0f;
     track.loop = sis::LoopMode::sustainLoop;
@@ -341,7 +344,7 @@ int main()
         cache.insert (makeConstantSample ("c.wav", 48000));
 
         auto track = makeTrack ("c.wav");
-        track.fadeIn = 0.5;    // halbe Ausschnittlänge = 24000 Samples
+        track.clips[0].fadeIn = 0.5;    // halbe Ausschnittlänge = 24000 Samples
         auto engine = makeEngineFor (makeModel ({ track }), cache);
         const auto rendered = render (*engine, 24000, 60, 1.0f);
 
@@ -356,7 +359,7 @@ int main()
         cache.insert (makeRampSample ("ramp.wav", 48000));
 
         auto track = makeTrack ("ramp.wav");
-        track.trimStart = 0.5;
+        track.clips[0].trimStart = 0.5;
         track.loop = sis::LoopMode::oneShot;
         auto engine = makeEngineFor (makeModel ({ track }), cache);
         // erst nach der kurzen Einschwingzeit der Hüllkurve messen (1 ms Klickschutz)
@@ -407,7 +410,7 @@ int main()
         cache.insert (makeConstantSample ("c.wav", 48000));
 
         auto track = makeTrack ("c.wav");
-        track.offset = 0.0125;   // 0,1 s der 8-Sekunden-Achse = 4800 Samples
+        track.clips[0].offset = 0.0125;   // 0,1 s der 8-Sekunden-Achse = 4800 Samples
         auto engine = makeEngineFor (makeModel ({ track }), cache);
         const auto rendered = render (*engine, 12000, 60, 1.0f);
 
@@ -485,10 +488,10 @@ int main()
         normal.loop = sis::LoopMode::oneShot;
 
         auto stretched = normal;
-        stretched.stretch = 2.0;
+        stretched.clips[0].stretch = 2.0;
 
         auto squeezed = normal;
-        squeezed.stretch = 0.5;
+        squeezed.clips[0].stretch = 0.5;
 
         auto plainEngine = makeEngineFor (makeModel ({ normal }), cache);
         const auto plain = render (*plainEngine, 72000, 60, 1.0f);
@@ -521,7 +524,7 @@ int main()
 
         auto track = makeTrack ("sine.wav");
         track.loop = sis::LoopMode::oneShot;
-        track.stretch = 2.0;
+        track.clips[0].stretch = 2.0;
 
         auto engine = makeEngineFor (makeModel ({ track }), cache);
         const auto rendered = render (*engine, 72000, 72, 1.0f);   // eine Oktave höher
@@ -866,7 +869,7 @@ int main()
 
         auto shortTrack = makeTrack ("sine.wav");
         shortTrack.loop = sis::LoopMode::oneShot;
-        shortTrack.trimEnd = 0.1;            // nur 0,1 s Sample
+        shortTrack.clips[0].trimEnd = 0.1;            // nur 0,1 s Sample
 
         auto dryEngine = makeEngineFor (makeModel ({ shortTrack }), cache);
         const auto dry = render (*dryEngine, 24000, 60, 1.0f);
@@ -2446,8 +2449,8 @@ int main()
         constantCache.insert (makeConstantSample ("dc.wav", length));
         auto fadedTrack = makeTrack ("dc.wav");
         fadedTrack.loop = sis::LoopMode::pingPong;
-        fadedTrack.fadeIn = 0.1;
-        fadedTrack.fadeOut = 0.1;
+        fadedTrack.clips[0].fadeIn = 0.1;
+        fadedTrack.clips[0].fadeOut = 0.1;
         auto faded = makeModel ({ fadedTrack });
         auto fadedEngine = makeEngine (*faded, constantCache);
         const auto fadedOut = render (*fadedEngine, 4 * length, 60, 1.0f);
@@ -2488,7 +2491,7 @@ int main()
 
         // Eine Spur mit Versatz hinter dem Locator wartet entsprechend kuerzer
         auto late = track;
-        late.offset = 1.0 / sis::InstrumentModel::timelineSeconds;   // 1 s
+        late.clips[0].offset = 1.0 / sis::InstrumentModel::timelineSeconds;   // 1 s
         auto lateModel = makeModel ({ late });
         auto lateEngine = makeEngine (*lateModel, cache);
         lateEngine->setStartOffset (60, 0.75);
@@ -2563,7 +2566,9 @@ int main()
         {
             sis::Track track;
             track.name = "T" + juce::String (i);
-            track.clip = "s" + juce::String (i) + ".wav";
+            sis::Clip piece;
+            piece.sample = "s" + juce::String (i) + ".wav";
+            track.clips.push_back (piece);
             zone->tracks.push_back (track);
         }
 
@@ -2576,23 +2581,24 @@ int main()
                 model.macroTargets[1].size() == 1 && model.macroTargets[1].front().trackIndex == 1);
 
         // Eine leere Spur wird gefuellt statt einer weiteren
-        zone->tracks[0].clip.clear();
+        zone->tracks[0].clips.clear();
         sis::SampleFile sample;
         sample.name = "neu.wav";
         sample.lengthSeconds = 2.0;
         const int filled = model.addSampleTrack (*zone, sample);
         expect ("Die leere Spur bekommt das Sample",
-                filled == 0 && zone->tracks.size() == 2 && zone->tracks[0].clip == "neu.wav");
-        expectNear ("Mit der Laenge des Samples", zone->tracks[0].natural,
+                filled == 0 && zone->tracks.size() == 2 && zone->tracks[0].clips.size() == 1
+                    && zone->tracks[0].clips[0].sample == "neu.wav");
+        expectNear ("Mit der Laenge des Samples", zone->tracks[0].clips[0].natural,
                     2.0 / sis::InstrumentModel::timelineSeconds, 1.0e-9);
 
         model.addSampleTrack (*zone, sample);
         expect ("Ohne leere Spur kommt eine dazu", zone->tracks.size() == 3);
 
-        expect ("Eine Spur ohne Clip hat keinen", ! sis::Track().hasClip());
-        sis::Track legacy;
-        legacy.clip = "leer";
-        expect ("Auch der alte Platzhalter nicht", ! legacy.hasClip());
+        expect ("Eine neue Spur hat keinen Clip", ! sis::Track().hasClips());
+        sis::Clip legacy;
+        legacy.sample = "leer";
+        expect ("Der alte Platzhalter ist kein Sample", ! legacy.hasSample());
 
         // Neue Zone neben der vorhandenen (C4-B4): sie waechst nur in den freien Platz
         const auto& fresh = model.addZoneAt (58, 100);
@@ -2603,6 +2609,148 @@ int main()
         const auto& layered = model.addZoneAt (64, 100);
         expect ("Ueber einer belegten Taste bleibt nur eine Velocity-Stufe frei",
                 layered.lowVelocity == 100 && layered.highVelocity == 100);
+    }
+
+    // --- Mehrere Clips auf einer Spur: der obere klingt, im Crossfade beide ------------
+    {
+        constexpr double axis = sis::InstrumentModel::timelineSeconds;
+        sis::SampleCache cache;
+        cache.insert (makeConstantSample ("low.wav", 48000, 0.25f));    // 1 s bei 0,25
+        cache.insert (makeConstantSample ("high.wav", 48000, 1.0f));    // 1 s bei 1,0
+
+        const auto clipOf = [] (const juce::String& name, double startSeconds)
+        {
+            sis::Clip c;
+            c.sample = name;
+            c.natural = 1.0 / sis::InstrumentModel::timelineSeconds;
+            c.offset = startSeconds / sis::InstrumentModel::timelineSeconds;
+            return c;
+        };
+
+        sis::Track track = makeTrack ("low.wav");
+        track.loop = sis::LoopMode::oneShot;
+        track.clips = { clipOf ("low.wav", 0.0), clipOf ("high.wav", 0.5) };   // high liegt oben ab 0,5 s
+
+        auto stacked = makeModel ({ track });
+        auto stackedEngine = makeEngine (*stacked, cache);
+        const auto out = render (*stackedEngine, 96000, 60, 1.0f);
+
+        expectNear ("Vor dem oberen Clip klingt der untere", out.at (12000), 0.25, 0.01);
+        expectNear ("In der Überschneidung nur der obere", out.at (36000), 1.0, 0.01);
+        expectNear ("Danach der obere allein", out.at (60000), 1.0, 0.01);
+        expect ("Hinter dem oberen ist Ruhe", out.peak (74000, 20000) < 0.001f);
+
+        // Umgekehrt gestapelt: der untere (high) ist in der Überschneidung stumm
+        auto swapped = track;
+        std::swap (swapped.clips[0], swapped.clips[1]);
+        auto swappedModel = makeModel ({ swapped });
+        auto swappedEngine = makeEngine (*swappedModel, cache);
+        const auto swappedOut = render (*swappedEngine, 96000, 60, 1.0f);
+        expectNear ("Liegt low oben, klingt in der Überschneidung low", swappedOut.at (36000), 0.25, 0.01);
+        expectNear ("Danach wieder high", swappedOut.at (60000), 1.0, 0.01);
+
+        // Crossfade über die Überschneidung 0,5 … 1,0 s: beide klingen, linear gemischt
+        auto crossed = track;
+        auto first = crossed.clips[0];
+        auto second = crossed.clips[1];
+        sis::geometry::ClipState a { first.offset, first.natural, first.stretch, first.trimStart, first.trimEnd, first.fadeIn, first.fadeOut };
+        sis::geometry::ClipState b { second.offset, second.natural, second.stretch, second.trimStart, second.trimEnd, second.fadeIn, second.fadeOut };
+        expect ("Crossfade laesst sich legen", sis::geometry::crossfade (a, b));
+        crossed.clips[0].fadeOut = a.fadeOut;
+        crossed.clips[1].fadeIn = b.fadeIn;
+
+        auto crossedModel = makeModel ({ crossed });
+        auto crossedEngine = makeEngine (*crossedModel, cache);
+        const auto crossedOut = render (*crossedEngine, 96000, 60, 1.0f);
+        expectNear ("Mitte des Crossfades: halb low, halb high", crossedOut.at (36000), 0.5 * 0.25 + 0.5 * 1.0, 0.02);
+        expectNear ("Anfang: noch ganz low", crossedOut.at (24100), 0.25, 0.02);
+        expectNear ("Ende: ganz high", crossedOut.at (47900), 1.0, 0.02);
+
+        // Speichern und Laden: zwei Clips bleiben zwei Clips, in derselben Stapelfolge
+        juce::AudioFormatManager formats;
+        sis::InstrumentModel loaded;
+        loaded.fromValueTree (stacked->toValueTree(), formats);
+        const auto& loadedClips = loaded.zones.front().tracks.front().clips;
+        expect ("Zwei Clips nach dem Laden", loadedClips.size() == 2);
+        expect ("In derselben Reihenfolge", loadedClips.size() == 2 && loadedClips[1].sample == "high.wav");
+        expectNear ("Mit ihrem Versatz", loadedClips.size() == 2 ? loadedClips[1].offset * axis : 0.0, 0.5, 1.0e-9);
+
+        // Eine Datei aus 1.11: ein Clip, der in der Spur selbst steht
+        juce::ValueTree legacyTree ("Instrument");
+        juce::ValueTree legacyZone ("Zone");
+        legacyZone.setProperty ("id", "alt", nullptr);
+        juce::ValueTree legacyTrack ("Track");
+        legacyTrack.setProperty ("name", "Alt", nullptr);
+        legacyTrack.setProperty ("clip", "low.wav", nullptr);
+        legacyTrack.setProperty ("offset", 0.25, nullptr);
+        legacyTrack.setProperty ("trimEnd", 0.5, nullptr);
+        legacyZone.appendChild (legacyTrack, nullptr);
+        juce::ValueTree emptyTrack ("Track");
+        emptyTrack.setProperty ("clip", "leer", nullptr);
+        legacyZone.appendChild (emptyTrack, nullptr);
+        legacyTree.appendChild (legacyZone, nullptr);
+
+        sis::InstrumentModel legacy;
+        expect ("Die alte Datei laedt", legacy.fromValueTree (legacyTree, formats));
+        const auto& legacyTracks = legacy.zones.front().tracks;
+        expect ("Ihr Clip wird ein Clip der Spur", legacyTracks.size() == 2 && legacyTracks[0].clips.size() == 1
+                                                     && legacyTracks[0].clips[0].sample == "low.wav"
+                                                     && legacyTracks[0].clips[0].offset == 0.25
+                                                     && legacyTracks[0].clips[0].trimEnd == 0.5);
+        expect ("Der alte Platzhalter „leer“ wird keiner", legacyTracks.size() == 2 && legacyTracks[1].clips.empty());
+    }
+
+    // --- Schleife bis zum nächsten Clip, Loop-Überblendung im zugeschnittenen Teil ------
+    {
+        sis::SampleCache cache;
+        cache.insert (makeConstantSample ("dc.wav", 4800, 0.5f));
+        cache.insert (makeRampSample ("ramp.wav", 4800));
+
+        sis::Clip looped;
+        looped.sample = "dc.wav";
+        sis::Clip next;
+        next.sample = "dc.wav";
+        next.offset = 1.0 / sis::InstrumentModel::timelineSeconds;   // bei 1 s
+        next.trimEnd = 0.1;                                            // 480 Samples lang
+
+        auto track = makeTrack ("dc.wav");
+        track.loop = sis::LoopMode::sustainLoop;
+        track.clips = { looped, next };
+
+        auto model = makeModel ({ track });
+        auto engine = makeEngine (*model, cache);
+        const auto out = render (*engine, 72000, 60, 1.0f);
+        expectNear ("Die Schleife klingt bis zum nächsten Clip", out.at (40000), 0.5, 0.01);
+        expectNear ("Dort klingt nur noch der nächste (nicht beide)", out.at (48200), 0.5, 0.01);
+
+        /* Zugeschnitten auf 25 … 75 % des Samples: Schleife und Überblendung lesen nur dort,
+           nie aus dem weggeschnittenen Teil. Auf der Rampe heißt das: kein Wert unter 0,25
+           oder über 0,75. */
+        sis::Clip trimmed;
+        trimmed.sample = "ramp.wav";
+        trimmed.trimStart = 0.25;
+        trimmed.trimEnd = 0.75;
+
+        auto rampTrack = makeTrack ("ramp.wav");
+        rampTrack.loop = sis::LoopMode::sustainLoop;
+        rampTrack.loopCrossfade = 0.5;
+        rampTrack.clips = { trimmed };
+
+        auto rampModel = makeModel ({ rampTrack });
+        auto rampEngine = makeEngine (*rampModel, cache);
+        const auto rampOut = render (*rampEngine, 20000, 60, 1.0f);
+
+        float lowest = 1.0f, highest = 0.0f;
+        for (int i = 200; i < 20000; ++i)
+        {
+            lowest = juce::jmin (lowest, rampOut.at (i));
+            highest = juce::jmax (highest, rampOut.at (i));
+        }
+
+        /* Die Überblendung mit gleicher Leistung darf in der Mitte etwas unter den kleineren
+           der beiden Werte sinken, aber nie an den weggeschnittenen Anfang heranreichen. */
+        expect ("Die Schleife liest nichts nach dem Zuschnitt", highest < 0.76f);
+        expect ("Und nichts vor dem Zuschnitt", lowest > 0.2f);
     }
 
     std::printf ("%d Prüfungen, %d Fehler\n", checks, failures);

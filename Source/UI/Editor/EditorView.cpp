@@ -121,12 +121,11 @@ void EditorView::paint (juce::Graphics& g)
 
     const bool trimming = ctx.ui.edgeMode == EdgeMode::trim;
     const juce::String hints[] = {
-        trimming ? "Kante ziehen schneidet zu · Shift streckt · obere Ecken ziehen Fades"_u
-                 : "Kante ziehen streckt · Shift schneidet zu · obere Ecken ziehen Fades"_u,
-        trimming ? "Kante schneidet zu · Shift streckt · Ecken = Fades"_u
-                 : "Kante streckt · Shift schneidet zu · Ecken = Fades"_u,
-        trimming ? "Kante: zuschneiden · Shift: strecken"_u
-                 : "Kante: strecken · Shift: zuschneiden"_u
+        trimming ? "Kante schneidet zu · Shift streckt · Ecken = Fades · rechts halten: Werkzeuge · X: Crossfade"_u
+                 : "Kante streckt · Shift schneidet zu · Ecken = Fades · rechts halten: Werkzeuge · X: Crossfade"_u,
+        trimming ? "Kante schneidet zu · Shift streckt · rechts halten: Werkzeuge"_u
+                 : "Kante streckt · Shift schneidet zu · rechts halten: Werkzeuge"_u,
+        "Rechts halten: Werkzeuge"_u
     };
 
     const auto hintFont = monoFont (10.0f);

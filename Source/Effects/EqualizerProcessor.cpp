@@ -14,7 +14,7 @@ namespace
             case 0:  return "Tiefen";
             case 1:  return "Tiefmitten";
             case 2:  return "Hochmitten";
-            default: return "Höhen";
+            default: return juce::String::fromUTF8 ("Höhen");
         }
     }
 
