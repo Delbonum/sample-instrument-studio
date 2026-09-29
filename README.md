@@ -487,3 +487,12 @@ ausmacht — nicht bloß, dass sich etwas ändert.
   Export, Hosting, Bounce, Undo). Sie sind der schnellste Weg, eine Änderung zu prüfen.
 - Alles, was die Maus braucht, lässt sich nur von Hand prüfen — synthetische Mausereignisse
   erreichen das Fenster nicht. Screenshots gehen; gepostete F-Tasten auch.
+
+## Lizenz
+
+Copyright © 2026 WiskundeKnobbel (Philippe Nix)
+
+Sample Instrument Studio steht unter der **GNU Affero General Public License v3.0** (siehe
+`LICENSE`). Das passt zu JUCE, das ohne kommerzielle Lizenz nur unter AGPLv3 verwendet
+werden darf. Die mitgelieferten IBM-Plex-Schriften stehen unter der SIL Open Font License
+(`assets/fonts/OFL.txt`).
