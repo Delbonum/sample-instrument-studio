@@ -366,6 +366,9 @@ juce::PopupMenu StudioShell::getMenuForIndex (int index, const juce::String&)
             menu.addSeparator();
             add (cmd::bounceZone, "Zone bouncen", {});
             add (cmd::assignMacros, "Makros zuweisen …"_u, {});
+            menu.addSeparator();
+            add (cmd::keepTempoAll, "Tempo halten: alle Spuren ein"_u, {});
+            add (cmd::keepTempoNone, "Tempo halten: alle Spuren aus"_u, {});
             break;
 
         case 4:
@@ -398,7 +401,7 @@ void StudioShell::getAllCommands (juce::Array<juce::CommandID>& commands)
                          cmd::toggleVelocityLayers, cmd::toggleSnap,
                          cmd::addZone, cmd::addTrack, cmd::bounceZone, cmd::assignMacros,
                          cmd::openManual, cmd::showShortcuts, cmd::credits,
-                         cmd::togglePlayback });
+                         cmd::togglePlayback, cmd::keepTempoAll, cmd::keepTempoNone });
 }
 
 void StudioShell::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo& info)
@@ -474,6 +477,8 @@ void StudioShell::getCommandInfo (juce::CommandID id, juce::ApplicationCommandIn
         case cmd::addTrack:         set ("Spur hinzufügen"_u, "Instrument");         break;
         case cmd::bounceZone:       set ("Zone bouncen", "Instrument");             break;
         case cmd::assignMacros:     set ("Makros zuweisen", "Instrument");          break;
+        case cmd::keepTempoAll:     set ("Tempo halten: alle Spuren ein", "Instrument"); break;
+        case cmd::keepTempoNone:    set ("Tempo halten: alle Spuren aus", "Instrument"); break;
 
         case cmd::openManual:       set ("Handbuch", "Hilfe");                      info.addDefaultKeypress (KP::F1Key, 0); break;
         case cmd::showShortcuts:    set ("Tastaturkürzel"_u, "Hilfe");               break;
@@ -631,6 +636,41 @@ bool StudioShell::perform (const InvocationInfo& info)
         case cmd::bounceZone:
             bounceSelectedZone();
             break;
+
+        case cmd::keepTempoAll:
+        case cmd::keepTempoNone:
+        {
+            /* Schaltet alle Spuren aller Zonen auf einmal. Danach lässt sich jede Spur im
+               Inspektor wieder einzeln umstellen – das Menü ist eine Abkürzung, keine
+               zweite Einstellung. */
+            const bool keep = info.commandID == cmd::keepTempoAll;
+            auto& model = processor.getModel();
+            int changed = 0;
+
+            for (auto& zone : model.zones)
+                for (auto& track : zone.tracks)
+                    if (track.keepTempo != keep)
+                        ++changed;
+
+            if (changed == 0)
+            {
+                showToast (keep ? "Alle Spuren halten das Tempo schon"_u
+                                : "Keine Spur hält das Tempo"_u);
+                break;
+            }
+
+            processor.getHistory().nameNextStep (keep ? "Tempo halten: alle ein"_u : "Tempo halten: alle aus"_u);
+
+            for (auto& zone : model.zones)
+                for (auto& track : zone.tracks)
+                    track.keepTempo = keep;
+
+            model.notifyChanged();
+            showToast ((keep ? "Tempo halten für "_u : "Klassisches Transponieren für "_u)
+                       + juce::String (changed) + (changed == 1 ? " Spur" : " Spuren")
+                       + " · einzeln umstellen im Inspektor"_u);
+            break;
+        }
 
         case cmd::assignMacros:
             MacroWindow::show (ctx, this);

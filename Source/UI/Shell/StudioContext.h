@@ -136,7 +136,10 @@ namespace cmd
         showShortcuts,
         credits,
 
-        togglePlayback
+        togglePlayback,
+
+        keepTempoAll,      // „Tempo halten“ für alle Spuren des Instruments ein …
+        keepTempoNone      // … bzw. aus
     };
 } // namespace cmd
 
