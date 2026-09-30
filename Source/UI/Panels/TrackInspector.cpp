@@ -588,6 +588,8 @@ TrackInspectorContent::TrackInspectorContent (StudioContext& c) : ctx (c)
     for (const auto& name : { "One-Shot", "Sustain-Loop", "Vor/Rückwärts" })
         loopBox.addItem (juce::String::fromUTF8 (name), loopBox.getNumItems() + 1);
 
+    loopBox.setTooltip ("Eine Schleife klingt bis zum nächsten Clip der Spur: bei aneinanderstoßenden "
+                        "Clips loopt nur der letzte, eine Lücke füllt der vordere."_u);
     loopBox.onChange = [this]
     {
         if (auto* t = getTrack())

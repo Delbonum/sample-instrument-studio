@@ -143,7 +143,7 @@ Mapping. Sie ist **nicht** bloß eine Ansicht:
 - **Zeitlineal**: links über den Spurköpfen die Anzeige des Locators („AB 2.50 s“), danach
   die Zeit des sichtbaren Ausschnitts (Mono 10 px); die Striche werden mit dem Zoom feiner
   oder gröber (10 ms bis 1 min). Ohne Zoom sind **8 Sekunden** sichtbar, hineingezoomt bis
-  0,25 s, herausgezoomt bis 32 s – mit **Strg+Mausrad** um den Zeiger oder mit − / +. Die
+  0,25 s, herausgezoomt bis 128 s (die ganze Achse) – mit **Strg+Mausrad** um den Zeiger oder mit − / +. Die
   Achse wächst mit dem letzten Clip (bis 128 s). Ein **waagerechter Rollbalken** unter den
   Spuren erscheint, sobald es mehr gibt; Shift+Mausrad und waagerechtes Wischen rollen
   ebenfalls, während der Wiedergabe blättert die Ansicht mit.
@@ -494,6 +494,7 @@ mit älteren Projektdateien, **y** neue Funktionen, **z** Fehlerbehebungen.
 
 | Version | Was dazugekommen ist |
 | --- | --- |
+| 1.16.1 | Herauszoomen bis zur ganzen Zeitachse (128 s statt 32 s); Handbuch mit Programm-Icon und Werkzeug-Symbolen, Schleifen genauer erklärt (auch als Tooltip am Loop-Modus) |
 | 1.16.0 | Überlappende Velocity-Zonen klingen gemeinsam, mit Überblendung über den gemeinsamen Bereich (Schraffur im Mapping); Umkehren je Clip statt je Spur; Handbuch (F1); exportierte App zeigt die Spiel-Oberfläche mit Audio-Einstellungen statt des Studios |
 | 1.15.0 | Zoom auf der Zeitachse (Strg+Mausrad, − / +), Raster wählbar von 10 ms bis 1 s; Normalisieren als Pegel des Clips; klassisches Transponieren nimmt die ganze Anordnung mit (Überschneidungen passen bei jeder Taste); Drumset-Pads in der Plugin-Ansicht; Kopieren, Einfügen und Verschieben über Spuren im Modell und getestet |
 | 1.14.0 | Menü „Instrument“: „Tempo halten“ für alle Spuren auf einmal ein- oder ausschalten (einzeln bleibt es im Inspektor umstellbar) |

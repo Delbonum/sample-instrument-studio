@@ -61,7 +61,7 @@ public:
     /** Wie viel der Achse der Editor zeigt (1 = 8 Sekunden). Kleiner heißt hineingezoomt. */
     double visibleLength = 1.0;
     static constexpr double minVisibleLength = 1.0 / 32.0;   // 0,25 s
-    static constexpr double maxVisibleLength = 4.0;          // 32 s
+    static constexpr double maxVisibleLength = 16.0;         // 128 s: die ganze Achse
     EdgeMode edgeMode = EdgeMode::trim;
 
     /** Auswahl im Sample-Editor, als Anteil des ganzen Samples. */
