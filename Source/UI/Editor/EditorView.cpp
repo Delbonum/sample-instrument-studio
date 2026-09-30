@@ -32,7 +32,13 @@ EditorView::EditorView (StudioContext& c)
         ctx.ui.edgeMode = EdgeMode::stretch;
         ctx.ui.changed();
     };
-    snapButton.onClick = [this] { ctx.commands.invokeDirectly (cmd::toggleSnap, false); };
+    snapButton.onClick = [this] { showGridMenu(); };
+
+    // Zoom um die Mitte des sichtbaren Ausschnitts; Strg+Mausrad zoomt um den Zeiger
+    zoomOutButton.onClick = [this] { trackArea.zoomBy (1.5, ctx.ui.timelineStart + 0.5 * ctx.ui.visibleLength); };
+    zoomInButton.onClick = [this] { trackArea.zoomBy (1.0 / 1.5, ctx.ui.timelineStart + 0.5 * ctx.ui.visibleLength); };
+    zoomOutButton.setTooltip ("Herauszoomen (Strg+Mausrad)");
+    zoomInButton.setTooltip ("Hineinzoomen (Strg+Mausrad)");
     addTrackButton.onClick = [this] { ctx.commands.invokeDirectly (cmd::addTrack, false); };
     bounceButton.onClick = [this] { ctx.commands.invokeDirectly (cmd::bounceZone, false); };
 
@@ -49,7 +55,8 @@ EditorView::EditorView (StudioContext& c)
     dark.fontSize = 11.5f;
     bounceButton.setStyle (dark);
 
-    for (auto* b : { &backButton, &trimModeButton, &stretchModeButton, &snapButton, &addTrackButton, &bounceButton })
+    for (auto* b : { &backButton, &trimModeButton, &stretchModeButton, &snapButton, &addTrackButton, &bounceButton,
+                     &zoomOutButton, &zoomInButton })
         addAndMakeVisible (b);
 
     viewport.setViewedComponent (&trackArea, false);
@@ -93,6 +100,16 @@ void EditorView::updateStyles()
     snap.text = ctx.ui.snapToGrid ? colours::accentDark : colours::textSecondary;
     snap.border = ctx.ui.snapToGrid ? colours::accent : colours::lineStrongAlt;
     snapButton.setStyle (snap);
+    snapButton.setButtonText (ctx.ui.snapToGrid ? "Raster " + TrackArea::timeLabel (ctx.ui.gridSeconds, ctx.ui.gridSeconds)
+                                                : juce::String ("Raster aus"));
+
+    FlatButton::Style zoom;
+    zoom.fontSize = 12.0f;
+    zoom.background = colours::surface;
+    zoom.border = colours::lineStrongAlt;
+    zoom.text = colours::text;
+    zoomOutButton.setStyle (zoom);
+    zoomInButton.setStyle (zoom);
 }
 
 void EditorView::paint (juce::Graphics& g)
@@ -162,19 +179,25 @@ void EditorView::paint (juce::Graphics& g)
                 juce::Justification::centredLeft, false);
 
     const auto lane = getRulerLane();
-    const double start = ctx.ui.timelineStart;
-    const auto timeToX = [&lane, start] (double time)
+
+    // Dieselbe Umrechnung wie in den Spuren, nur auf das Lineal verschoben
+    const auto timeToX = [this, &lane] (double time)
     {
-        return (float) lane.getX() + (float) (time - start) * (float) lane.getWidth();
+        return (float) lane.getX() + trackArea.timeToX (time) - (float) TrackArea::headerWidth;
     };
 
     {
         const juce::Graphics::ScopedSaveState state (g);
         g.reduceClipRegion (lane);
 
-        for (int second = (int) std::floor (start * InstrumentModel::timelineSeconds); ; ++second)
+        const double secondsVisible = ctx.ui.visibleLength * InstrumentModel::timelineSeconds;
+        const double step = TrackArea::tickStepSeconds ((double) lane.getWidth() / secondsVisible);
+        const double startSeconds = ctx.ui.timelineStart * InstrumentModel::timelineSeconds;
+
+        for (auto n = (juce::int64) std::floor (startSeconds / step); ; ++n)
         {
-            const float x = timeToX (second / InstrumentModel::timelineSeconds);
+            const double seconds = (double) n * step;
+            const float x = timeToX (seconds / InstrumentModel::timelineSeconds);
 
             if (x > (float) lane.getRight())
                 break;
@@ -182,7 +205,7 @@ void EditorView::paint (juce::Graphics& g)
             g.setColour (colours::divider);
             g.fillRect (juce::Rectangle<float> (std::round (x), (float) lane.getY(), 1.0f, (float) lane.getHeight()));
             g.setColour (colours::textTertiary);
-            g.drawText (juce::String (second) + " s", juce::roundToInt (x) + 4, lane.getY(), 40, lane.getHeight(),
+            g.drawText (TrackArea::timeLabel (seconds, step), juce::roundToInt (x) + 4, lane.getY(), 60, lane.getHeight(),
                         juce::Justification::centredLeft, false);
         }
 
@@ -196,6 +219,32 @@ void EditorView::paint (juce::Graphics& g)
     }
 }
 
+void EditorView::showGridMenu()
+{
+    static constexpr double widths[] = { 0.01, 0.05, 0.1, 0.25, 0.5, 1.0 };
+
+    juce::PopupMenu menu;
+    menu.addItem ("Aus", true, ! ctx.ui.snapToGrid, [this]
+    {
+        ctx.ui.snapToGrid = false;
+        ctx.ui.changed();
+    });
+    menu.addSeparator();
+
+    for (const double width : widths)
+    {
+        const bool current = ctx.ui.snapToGrid && std::abs (ctx.ui.gridSeconds - width) < 1.0e-9;
+        menu.addItem (TrackArea::timeLabel (width, width), true, current, [this, width]
+        {
+            ctx.ui.snapToGrid = true;
+            ctx.ui.gridSeconds = width;
+            ctx.ui.changed();
+        });
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&snapButton));
+}
+
 juce::Rectangle<int> EditorView::getRulerLane() const
 {
     const int width = juce::jmax (1, trackArea.getWidth() - TrackArea::headerWidth);
@@ -205,9 +254,9 @@ juce::Rectangle<int> EditorView::getRulerLane() const
 void EditorView::setLocatorFrom (int x)
 {
     const auto lane = getRulerLane();
-    const double time = ctx.ui.timelineStart + (double) (x - lane.getX()) / (double) lane.getWidth();
+    const double time = trackArea.xToTime ((float) (x - lane.getX() + TrackArea::headerWidth));
 
-    ctx.ui.locator = juce::jlimit (0.0, TrackArea::maxAxis, geometry::snapTime (time, ctx.ui.snapToGrid));
+    ctx.ui.locator = juce::jlimit (0.0, TrackArea::maxAxis, trackArea.snapped (time));
     ctx.ui.changed();
 }
 
@@ -244,9 +293,10 @@ void EditorView::scrollBarMoved (juce::ScrollBar*, double newRangeStart)
 
 void EditorView::updateScrollBar()
 {
-    const double total = juce::jmax (TrackArea::axisLength (ctx.model.getSelectedZone()), ctx.ui.timelineStart + 1.0);
+    const double total = juce::jmax (TrackArea::axisLength (ctx.model.getSelectedZone()),
+                                     ctx.ui.timelineStart + ctx.ui.visibleLength);
     timeScroll.setRangeLimits (0.0, total, juce::dontSendNotification);
-    timeScroll.setCurrentRange (ctx.ui.timelineStart, 1.0, juce::dontSendNotification);
+    timeScroll.setCurrentRange (ctx.ui.timelineStart, ctx.ui.visibleLength, juce::dontSendNotification);
 }
 
 void EditorView::resized()
@@ -270,6 +320,10 @@ void EditorView::resized()
     place (addTrackButton, header, addTrackButton.getTextWidth() + 20, buttonHeight, true);
     header.removeFromRight (10);
     place (snapButton, header, snapButton.getTextWidth() + 20, buttonHeight, true);
+    header.removeFromRight (6);
+    place (zoomInButton, header, buttonHeight, buttonHeight, true);
+    header.removeFromRight (2);
+    place (zoomOutButton, header, buttonHeight, buttonHeight, true);
     header.removeFromRight (10);
 
     const int segmentWidth = trimModeButton.getTextWidth() + stretchModeButton.getTextWidth() + 44;
@@ -284,7 +338,8 @@ void EditorView::resized()
     sampleEditor.setBounds (area.removeFromBottom (metrics::lowerZone));
 
     // Rollbalken für die Zeit nur, wenn es mehr als die sichtbaren 8 Sekunden gibt
-    const bool scrolls = TrackArea::axisLength (ctx.model.getSelectedZone()) > 1.0 + 1.0e-6 || ctx.ui.timelineStart > 0.0;
+    const bool scrolls = TrackArea::axisLength (ctx.model.getSelectedZone()) > ctx.ui.visibleLength + 1.0e-6
+                         || ctx.ui.timelineStart > 0.0;
     timeScroll.setVisible (scrolls);
 
     if (scrolls)

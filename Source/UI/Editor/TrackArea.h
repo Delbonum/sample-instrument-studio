@@ -51,9 +51,22 @@ public:
         letzten Clip (auf volle Sekunden, mit einer Sekunde Luft). */
     static double axisLength (const Zone*);
 
-    /** x in dieser Komponente ↔ Zeit auf der Achse, unter Berücksichtigung des Bildlaufs. */
+    /** x in dieser Komponente ↔ Zeit auf der Achse, unter Berücksichtigung von Bildlauf und Zoom. */
     float timeToX (double time) const;
     double xToTime (float x) const;
+
+    /** Abstand der Rasterlinien bzw. Lineal-Striche: der kleinste runde Wert, bei dem sie
+        mindestens `minPixels` auseinanderliegen. */
+    static double tickStepSeconds (double pixelsPerSecond, double minPixels = 64.0);
+
+    /** Beschriftung eines Zeitpunkts passend zur Schrittweite („1.5 s“, „250 ms“). */
+    static juce::String timeLabel (double seconds, double step);
+
+    /** Zoomt um `factor` (kleiner als 1 = hinein), `anchor` bleibt an seiner Stelle. */
+    void zoomBy (double factor, double anchor);
+
+    /** Einrasten mit der eingestellten Rasterweite. */
+    double snapped (double time) const;
 
     // Zwischenablage (Strg+C / X / V)
     void copyClips();
@@ -139,14 +152,7 @@ private:
     juce::uint32 dragClip = 0;
     double grabOffset = 0.0;
     bool dragMoved = false;
-    /** Ausgangslage eines mitgezogenen Clips: Zeit und Spur. */
-    struct Origin
-    {
-        double offset = 0.0;
-        int track = 0;
-    };
-
-    std::map<juce::uint32, Origin> moveOrigins;
+    std::map<juce::uint32, ClipOrigin> moveOrigins;   // Ausgangslage aller mitgezogenen Clips
     int dragStartRow = 0;
     int createdTracks = 0;   // beim Ziehen nach unten neu angelegte Spuren
 

@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Handbuch · Sample Instrument Studio</title>
+<style>
+  :root {
+    --bg: #F4F3F0; --surface: #FBFAF8; --line: #D6D3CD; --line-fine: #E1DED8;
+    --text: #191817; --text-2: #56534E; --text-3: #6E6B66;
+    --accent: #7A6CF0; --accent-dark: #3B2FA8; --accent-soft: #EEEBFE; --warn: #B4553F;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  }
+  .page { display: grid; grid-template-columns: 250px minmax(0, 1fr); max-width: 1180px; margin: 0 auto; }
+  nav {
+    position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+    padding: 28px 18px; border-right: 1px solid var(--line);
+  }
+  nav .brand { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+  nav .version { font: 11px "IBM Plex Mono", Consolas, monospace; color: var(--text-3); margin-bottom: 20px; }
+  nav a { display: block; color: var(--text-2); text-decoration: none; font-size: 13.5px; padding: 3px 0; }
+  nav a:hover { color: var(--accent-dark); }
+  main { padding: 36px 48px 80px; min-width: 0; }
+  h1 { font-size: 28px; margin: 0 0 6px; }
+  .lead { color: var(--text-2); font-size: 16px; margin: 0 0 28px; max-width: 70ch; }
+  h2 {
+    font-size: 20px; margin: 44px 0 10px; padding-top: 18px; border-top: 1px solid var(--line);
+    scroll-margin-top: 12px;
+  }
+  h3 { font-size: 15.5px; margin: 24px 0 6px; }
+  p, li { max-width: 72ch; }
+  code, kbd {
+    font: 13px "IBM Plex Mono", Consolas, monospace; background: var(--surface);
+    border: 1px solid var(--line-fine); padding: 0 5px;
+  }
+  kbd { border-color: var(--line); border-bottom-width: 2px; }
+  table { border-collapse: collapse; width: 100%; max-width: 820px; margin: 10px 0 18px; background: var(--surface); }
+  th, td { text-align: left; vertical-align: top; padding: 7px 10px; border: 1px solid var(--line-fine); font-size: 14px; }
+  th { background: #EDEBE7; font-weight: 600; }
+  td:first-child { white-space: nowrap; }
+  .note {
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+    padding: 10px 14px; margin: 14px 0; max-width: 72ch;
+  }
+  .warn { background: #F7ECE8; border-left-color: var(--warn); }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps li { counter-increment: step; position: relative; padding-left: 34px; margin: 8px 0; }
+  .steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 1px; width: 22px; height: 22px;
+    background: var(--accent); color: #fff; font: 600 12px/22px "IBM Plex Mono", Consolas, monospace; text-align: center;
+  }
+  @media (max-width: 820px) {
+    .page { grid-template-columns: 1fr; }
+    nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    main { padding: 24px 16px 60px; }
+    td:first-child { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+<nav>
+  <div class="brand">Sample Instrument Studio</div>
+  <div class="version">Handbuch · Version {{VERSION}}</div>
+  <a href="#ueberblick">Überblick</a>
+  <a href="#start">Erste Schritte</a>
+  <a href="#mapping">Mapping</a>
+  <a href="#drumset">Drumset</a>
+  <a href="#editor">Editor</a>
+  <a href="#clips">Clips bearbeiten</a>
+  <a href="#zeit">Zeitachse, Raster, Wiedergabe</a>
+  <a href="#sampleeditor">Sample-Editor</a>
+  <a href="#spur">Spur-Einstellungen</a>
+  <a href="#effekte">Effekte und Makros</a>
+  <a href="#zone">Zone und Hüllkurve</a>
+  <a href="#bounce">Zone bouncen</a>
+  <a href="#export">Exportieren</a>
+  <a href="#plugin">Im Plugin (DAW)</a>
+  <a href="#tasten">Tastenkürzel</a>
+  <a href="#tipps">Tipps und Grenzen</a>
+</nav>
+
+<main>
+<h1>Handbuch</h1>
+<p class="lead">Sample Instrument Studio baut aus eigenen Audiodateien ein spielbares Instrument:
+Samples laden, zuschneiden und schichten, mit Effekten versehen, über die Tastatur verteilen –
+und das Ergebnis als VST3-Plugin oder eigenständige App weitergeben.</p>
+
+<h2 id="ueberblick">Überblick</h2>
+<p>Das Studio hat drei Ansichten, oben links umzuschalten oder mit <kbd>F2</kbd>, <kbd>F3</kbd>, <kbd>F4</kbd>:</p>
+<table>
+  <tr><th>Ansicht</th><th>Wozu</th></tr>
+  <tr><td>Mapping</td><td>Welche Taste und welche Anschlagstärke welchen Klang auslöst – als Zonen über der Klaviatur oder als gezeichnetes Schlagzeug.</td></tr>
+  <tr><td>Editor</td><td>Was in einer Zone erklingt: Spuren mit Clips auf einer Zeitachse, Tonhöhe, Schleifen, Effekte.</td></tr>
+  <tr><td>Export</td><td>Das fertige Instrument als VST3-Plugin, als App oder als Projektordner ausgeben.</td></tr>
+</table>
+<p>Die Begriffe, die überall vorkommen:</p>
+<ul>
+  <li><b>Zone</b> – ein Tastenbereich und ein Bereich der Anschlagstärke (Velocity). Eine Taste löst die Zonen aus, in denen sie liegt.</li>
+  <li><b>Spur</b> – eine Schicht innerhalb einer Zone mit eigenem Pegel, eigener Tonhöhe und eigener Effektkette. Alle Spuren einer Zone klingen übereinander.</li>
+  <li><b>Clip</b> – ein Stück Sample auf der Zeitachse einer Spur. Eine Spur kann beliebig viele Clips tragen.</li>
+</ul>
+<p>Links steht der <b>Sample-Browser</b> (im Editor rechts), rechts die Einstellungen der Zone (im Editor links die der Spur). Beide Spalten lassen sich mit <kbd>F9</kbd> und <kbd>F10</kbd> ausblenden, die Menüleiste mit <kbd>Strg</kbd>+<kbd>M</kbd>.</p>
+
+<h2 id="start">Erste Schritte</h2>
+<ol class="steps">
+  <li><b>Datei → Neues Instrument</b> (<kbd>Strg</kbd>+<kbd>N</kbd>). Das Studio fragt nach der Art: <b>Tonhöhen-Instrument</b> (ein Sample wird über die Tastatur transponiert, etwa für Bass oder Klavier) oder <b>Drumset</b> (jede Taste ist ein eigenes Teil und klingt in seiner eigenen Tonhöhe).</li>
+  <li><b>Samples holen:</b> Audiodateien aus dem Explorer auf die gestrichelte Fläche unten im Sample-Browser ziehen oder <b>Datei → Samples importieren</b> (<kbd>Strg</kbd>+<kbd>I</kbd>). WAV, AIFF, FLAC, MP3 und OGG werden gelesen.</li>
+  <li><b>Zuordnen:</b> ein Sample aus der Liste auf eine Zone, eine Taste der Klaviatur oder ein Teil des Schlagzeugs ziehen. Es wird dort eine Spur. Auf freie Fläche gezogen, entsteht eine neue Zone.</li>
+  <li><b>Spielen:</b> auf die Klaviatur klicken, die Tasten <kbd>A</kbd> bis <kbd>L</kbd> der Computertastatur drücken oder ein MIDI-Keyboard anschließen (Audio-Einstellungen mit <kbd>F12</kbd>).</li>
+  <li><b>Formen:</b> Doppelklick auf die Zone öffnet den Editor. Dort Clips zuschneiden, schichten, Tonhöhe und Effekte einstellen.</li>
+  <li><b>Sichern und ausgeben:</b> <kbd>Strg</kbd>+<kbd>S</kbd> speichert das Projekt (<code>.sisp</code>), <kbd>Strg</kbd>+<kbd>E</kbd> öffnet den Export.</li>
+</ol>
+<div class="note">Fast alles lässt sich mit <kbd>Strg</kbd>+<kbd>Z</kbd> zurücknehmen und mit <kbd>Strg</kbd>+<kbd>Y</kbd> wiederholen – bis zu 60 Schritte. Das Menü Bearbeiten nennt, was zurückgenommen würde.</div>
+
+<h2 id="mapping">Mapping</h2>
+<h3>Zonenraster</h3>
+<p>Waagerecht die Tasten C1 bis B6, senkrecht die Anschlagstärke von 0 (unten) bis 127 (oben). Jede Zone ist ein Rechteck. <b>Klick</b> wählt eine Zone, <b>Doppelklick</b> öffnet sie im Editor. Tastenbereich, Grundton und Velocity-Bereich der gewählten Zone stehen rechts und sind dort einstellbar. Der <b>Grundton</b> ist die Taste, auf der das Sample in seiner Originaltonhöhe klingt.</p>
+<p><b>Zone hinzufügen</b> legt eine neue Zone an. Eine Zone mit Samples trägt oben rechts eine Marke mit deren Anzahl und unten eine kleine Wellenform.</p>
+
+<h3>Samples hineinziehen</h3>
+<ul>
+  <li>Auf eine <b>Zone</b>: das Sample wird dort eine Spur (eine leere Spur wird gefüllt).</li>
+  <li>Auf <b>freie Fläche</b>: um die Taste herum entsteht eine neue Zone – so breit, wie Platz ist, höchstens eine Oktave, im noch freien Velocity-Bereich.</li>
+  <li>Auf eine <b>Taste der Klaviatur</b>: in deren Zone, sonst ebenso eine neue.</li>
+</ul>
+<p>Die Ansicht bleibt dabei im Mapping; das Ziel leuchtet kurz auf. Doppelklick auf ein Sample in der Liste legt es dagegen in die gewählte Zone und wechselt in den Editor.</p>
+
+<h3>Velocity-Schichten und Überblendung</h3>
+<p>Mehrere Zonen dürfen sich überschneiden. Wo sie es tun, klingen <b>alle</b>, und die Überschneidung ist schraffiert. Wie sie zusammenklingen, hängt davon ab, wie sie liegen:</p>
+<table>
+  <tr><th>Lage</th><th>Wirkung</th></tr>
+  <tr><td>Eine reicht nach oben über die andere hinaus</td><td>Über den gemeinsamen Bereich blendet die untere aus und die obere ein. So geht ein leises Sample weich in ein lautes über, je fester man anschlägt.</td></tr>
+  <tr><td>Eine liegt ganz in der anderen (oder beide gleich)</td><td>Beide klingen voll – das ist Schichtung, etwa ein Anschlaggeräusch über einem Ton.</td></tr>
+</table>
+<p>Ein Beispiel: Zone „leise“ von 0 bis 90, Zone „laut“ von 60 bis 127. Unter 60 klingt nur „leise“, über 90 nur „laut“, dazwischen gleiten sie ineinander.</p>
+<p>Über <b>Ansicht → Velocity-Layer</b> lässt sich die Velocity-Achse ausblenden, wenn man sie nicht braucht.</p>
+
+<h2 id="drumset">Drumset</h2>
+<p>Ist das Instrument ein Drumset (Schalter oben rechts im Mapping), zeigt das Mapping ein Schlagzeug von oben. Jedes Teil ist eine Zone auf <b>einer</b> Taste, und die Taste verstimmt das Sample nicht. Die Tasten folgen <b>General MIDI</b> (Kick 36, Snare 38, HiHat zu 42 …), damit Drum-Patterns aus der DAW auf den richtigen Teilen landen.</p>
+<ul>
+  <li><b>Klick</b> auf ein Teil schlägt es an und wählt es, <b>Doppelklick</b> öffnet es im Editor.</li>
+  <li>Ein <b>Sample aus dem Browser</b> auf ein Teil ziehen – fertig. Die Marke am Rand zeigt die Zahl der Samples darin.</li>
+  <li><b>Teil hinzufügen</b> (oben rechts): Crash 2, China, Splash, weitere Toms (höchstens fünf), Clap, Cowbell, Tamburin. <b>Rechtsklick</b> auf ein Teil nimmt es wieder heraus.</li>
+  <li><b>Spielweisen</b>: HiHat (zu · offen · Fuß), Snare (Fell · Rim-Shot · Rim-Click · Flam) und Ride (Fläche · Glocke) haben einen Umschalter unter dem Teil. Jede Spielweise ist eine eigene Zone mit eigener Taste; ein Punkt zeigt, welche schon ein Sample hat.</li>
+</ul>
+<p>Die Note eines Teils lässt sich rechts bei der Zone ändern. Den Flam gibt es in General MIDI nicht; er liegt auf G1.</p>
+
+<h2 id="editor">Editor</h2>
+<p>Der Editor zeigt die gewählte Zone. Jede Zeile ist eine Spur: links der <b>Spurkopf</b> mit Name, <b>M</b> (stumm), <b>S</b> (solo) und Pegel, rechts die Zeitachse mit den Clips. Unten der <b>Sample-Editor</b> für den gewählten Clip, links die Einstellungen der gewählten Spur.</p>
+<ul>
+  <li><b>Spur hinzufügen</b> oben rechts legt eine leere Spur an. Ein Sample aus dem Browser auf eine Spur gezogen wird dort ein neuer Clip; unter die letzte Spur gezogen, entsteht eine neue Spur.</li>
+  <li><b>Doppelklick</b> auf den Spurkopf benennt die Spur um (<kbd>Enter</kbd> übernimmt, <kbd>Esc</kbd> bricht ab).</li>
+  <li><b>Rechtsklick</b> auf den Spurkopf: <b>Spur löschen</b> (bei mehreren gewählten Spuren alle) oder <b>Spur hinzufügen</b>.</li>
+</ul>
+
+<h2 id="clips">Clips bearbeiten</h2>
+<h3>Auswählen</h3>
+<p>Ein Klick auf einen Clip wählt ihn und seine Spur; ein Klick auf einen Spurkopf wählt die Spur. <kbd>Shift</kbd>+Klick nimmt weitere Clips bzw. Spuren hinzu oder wieder heraus. Ein Klick auf eine leere Stelle hebt die Auswahl der Clips auf, <kbd>Esc</kbd> ebenso.</p>
+
+<h3>Gesten</h3>
+<table>
+  <tr><th>Geste</th><th>Wirkung</th></tr>
+  <tr><td>Clip ziehen</td><td>Verschiebt alle gewählten Clips – in der Zeit und auf andere Spuren. Unter die letzte Spur gezogen, entsteht eine neue.</td></tr>
+  <tr><td>Kante ziehen</td><td><b>Zuschneiden</b>: Anfang oder Ende des Clips, das Tempo bleibt.</td></tr>
+  <tr><td><kbd>Shift</kbd> + Kante ziehen</td><td><b>Strecken</b> (Time-Stretch, 0,25× bis 4×): die Dauer ändert sich, die Tonhöhe nicht.</td></tr>
+  <tr><td>Obere Ecken ziehen</td><td>Fade-in (links) und Fade-out (rechts).</td></tr>
+  <tr><td><kbd>Entf</kbd></td><td>Löscht die gewählten Clips. Spuren werden so nie gelöscht.</td></tr>
+  <tr><td><kbd>X</kbd></td><td>Crossfade zwischen zwei gewählten, sich überschneidenden Clips (siehe unten).</td></tr>
+</table>
+<p>Der Schalter <b>Zuschneiden | Stretchen</b> oben legt fest, was eine Kante ohne Zusatztaste tut; <kbd>Shift</kbd> kehrt es um.</p>
+
+<h3>Werkzeuge</h3>
+<p><b>Rechte Maustaste in der Zeitleiste gedrückt halten</b> öffnet eine Werkzeugleiste am Zeiger. Über einem Symbol loslassen wählt das Werkzeug. Nur kurz geklickt, bleibt die Leiste offen, und ein Linksklick wählt.</p>
+<table>
+  <tr><th>Werkzeug</th><th>Wirkung</th></tr>
+  <tr><td>Auswahl (Pfeil)</td><td>Das normale Verhalten: wählen, ziehen, zuschneiden.</td></tr>
+  <tr><td>Löschen (Radiergummi)</td><td>Ein Klick auf einen Clip löscht ihn; mit gedrückter Taste über mehrere wischen.</td></tr>
+  <tr><td>Schere</td><td>Ein Klick schneidet den Clip genau am senkrechten Strich des Zeigers (bei eingeschaltetem Raster am Raster). Das Sample läuft über den Schnitt nahtlos weiter.</td></tr>
+</table>
+
+<h3>Überlappende Clips und Crossfade</h3>
+<p>Liegen Clips auf einer Spur übereinander, klingt der <b>obere</b> – der zuletzt gesetzte oder verschobene. Die Überschneidung ist schraffiert. In den Fades des oberen Clips scheint der untere durch.</p>
+<p>Daraus entsteht der <b>Crossfade</b>: zwei sich überschneidende Clips wählen (<kbd>Shift</kbd>+Klick) und <kbd>X</kbd> drücken. Der frühere blendet über die ganze Überschneidung aus, der spätere ein. Liegt ein Clip ganz im anderen, gibt es keinen Crossfade.</p>
+
+<h3>Kopieren und Einfügen</h3>
+<p><kbd>Strg</kbd>+<kbd>C</kbd> kopiert, <kbd>Strg</kbd>+<kbd>X</kbd> schneidet aus, <kbd>Strg</kbd>+<kbd>V</kbd> fügt am <b>Locator</b> in die gewählte Spur ein. Sind Clips aus mehreren Spuren kopiert, landet der früheste Clip der obersten Spur am Locator, alle anderen im selben Zeit- und Spurabstand – fehlende Spuren darunter entstehen.</p>
+
+<h2 id="zeit">Zeitachse, Raster und Wiedergabe</h2>
+<ul>
+  <li><b>Zoom</b>: <kbd>Strg</kbd>+Mausrad zoomt um den Zeiger, die Knöpfe <b>−</b> und <b>+</b> um die Mitte. Sichtbar sind 0,25 s bis 32 s.</li>
+  <li><b>Rollen</b>: <kbd>Shift</kbd>+Mausrad, waagerecht wischen oder der Rollbalken unter den Spuren (erscheint, sobald es mehr gibt, als zu sehen ist). Clips können bis 128 s lang sein.</li>
+  <li><b>Raster</b>: der Knopf zeigt die Rasterweite; ein Klick öffnet die Auswahl (aus, 10 ms, 50 ms, 100 ms, 250 ms, 0,5 s, 1 s). Verschieben, Kanten, Schere und Locator rasten darauf ein.</li>
+  <li><b>Locator</b>: Klick oder Ziehen im Zeitlineal setzt ihn; ein Klick auf die Anzeige „AB …“ links setzt ihn auf 0. Er steht auch im Sample-Editor und lässt sich dort ziehen.</li>
+  <li><b>Wiedergabe</b>: <kbd>Leertaste</kbd> oder der Play-Knopf spielt die gewählte Zone ab dem Locator, <b>LOOP</b> wiederholt.</li>
+</ul>
+
+<h2 id="sampleeditor">Sample-Editor</h2>
+<p>Zeigt das ganze Sample des gewählten Clips. Was außerhalb des Zuschnitts liegt, tritt zurück; die violette Fläche ist die Auswahl, die man mit der Maus aufzieht.</p>
+<table>
+  <tr><th>Werkzeug</th><th>Wirkung</th></tr>
+  <tr><td>Zuschneiden</td><td>Übernimmt die Auswahl als neuen Ausschnitt des Clips.</td></tr>
+  <tr><td>Fade ein / Fade aus</td><td>Setzt einen Anfangswert; feinjustiert wird an den Ecken des Clips.</td></tr>
+  <tr><td>Normalisieren</td><td>Hebt den lautesten Punkt des gespielten Ausschnitts auf 0 dBFS (höchstens +24 dB). Das ist ein Pegel des Clips, die Datei bleibt unberührt. Noch ein Klick nimmt es zurück. Der Clip zeigt den Wert im Kopf, etwa „+3.2 dB“.</td></tr>
+  <tr><td>Umkehren</td><td>Spielt den Clip rückwärts – bzw. alle gewählten Clips, wenn der gezeigte dazugehört.</td></tr>
+</table>
+<p>Bei einer Schleife zeigt der Sample-Editor den Loop-Bereich und die Überblendungen <b>grün</b>.</p>
+
+<h2 id="spur">Spur-Einstellungen</h2>
+<p>Links im Editor, für die gewählte Spur (Werte, die einen Clip betreffen, für den gewählten Clip):</p>
+<table>
+  <tr><th>Einstellung</th><th>Bedeutung</th></tr>
+  <tr><td>Gain, Pan</td><td>Pegel und Stereoposition der Spur.</td></tr>
+  <tr><td>Fades</td><td>Länge von Fade-in und Fade-out des gewählten Clips.</td></tr>
+  <tr><td>Halbtöne, Cent</td><td>Stimmt die Spur, auch im Drumset.</td></tr>
+  <tr><td>Stretch, 1:1</td><td>Dehnung des gewählten Clips; 1:1 setzt sie zurück.</td></tr>
+  <tr><td>Verfahren</td><td>Wie gedehnt wird: <i>Transienten-treu</i> (kurze Körner, gut für Schlagzeug), <i>Glatt (Pad)</i> (lange Körner, gut für Flächen), <i>Monophon</i>, <i>Korn · Granular</i>.</td></tr>
+  <tr><td>Tempo beim Transponieren halten</td><td>Aus: wie jeder klassische Sampler – höhere Töne laufen schneller und kürzer, die ganze Anordnung der Clips geht mit. An: die Dauer bleibt, die Tonhöhe übernimmt das gewählte Verfahren. Klingt bei großen Sprüngen etwas rauer. Für alle Spuren auf einmal: <b>Instrument → Tempo halten</b>.</td></tr>
+  <tr><td>Umkehren</td><td>Rückwärts, für den gewählten Clip (bzw. die gewählten Clips).</td></tr>
+  <tr><td>Loop-Modus</td><td><i>One-Shot</i>: einmal durch. <i>Sustain-Loop</i>: wiederholt, solange die Taste gehalten wird. <i>Vor/Rückwärts</i>: pendelt. Eine Schleife klingt bis zum nächsten Clip der Spur.</td></tr>
+  <tr><td>Loop ab</td><td>Wo die Schleife beginnt; davor klingt der Anschlag genau einmal.</td></tr>
+  <tr><td>X-Fade</td><td>Überblendung an der Naht der Schleife. Ohne sie ist die Naht meist hörbar.</td></tr>
+</table>
+
+<h2 id="effekte">Effekte und Makros</h2>
+<p>Jede Spur hat ihre eigene <b>Effektkette</b>. Das <b>+</b> öffnet das Menü: oben der <b>Kanal-Streifen</b> (Gate, Klangregelung und Kompressor in einer Karte), darunter die Familien Filter &amp; Klangregelung, Verzerrung, Modulation, Zeit &amp; Raum und Dynamik, unten die installierten VST3-Plugins.</p>
+<ul>
+  <li>Der Kippschalter einer Karte schaltet den Effekt stumm, die Pfeile sortieren um, ein Klick auf den Kopf klappt die Karte ein.</li>
+  <li><b>Presets</b> an jeder Karte: sichern, laden, löschen, Grundstellung.</li>
+  <li><b>Fremde Plugins</b> öffnen über „Öffnen“ ihre eigene Oberfläche; ihr Zustand wird im Projekt gespeichert.</li>
+  <li><b>Makros</b>: Rechtsklick auf einen Regler weist ihn einem der vier Makros zu. Die Makros stehen rechts und im Plugin als Drehregler; <b>Instrument → Makros zuweisen …</b> zeigt alle Zuweisungen.</li>
+</ul>
+<p>Alle internen Effekte gibt es auch als eigenständige VST3-Plugins für die DAW (SIS Chorus, SIS Delay …).</p>
+
+<h2 id="zone">Zone und Hüllkurve</h2>
+<p>Rechts im Mapping: Name, Grundton, Tastenbereich, Velocity-Bereich und Zahl der Samples der gewählten Zone. Darunter die <b>Hüllkurve</b> (Attack, Decay, Sustain, Release), die für das ganze Instrument gilt, und die vier <b>Makros</b>.</p>
+
+<h2 id="bounce">Zone bouncen</h2>
+<p><b>Zone bouncen</b> (Editor oben rechts) rechnet die Zone mit allen Spuren und Effekten in eine WAV-Datei und ersetzt ihre Spuren durch diese eine. Die Datei landet im Ordner <code>Bounces</code> neben dem Projekt (sonst unter Eigene Dokumente). Das lohnt sich vor allem mit fremden Plugins: die sind in einem exportierten Instrument nicht enthalten, ihr Klang nach dem Bounce schon.</p>
+
+<h2 id="export">Exportieren</h2>
+<p>In der Export-Ansicht die Ziele wählen, einen Ordner angeben und <b>Exportieren</b>:</p>
+<table>
+  <tr><th>Ziel</th><th>Ergebnis</th></tr>
+  <tr><td>VST3-Instrument</td><td>Ein eigenes Plugin mit dem Namen des Instruments und eigener Kennung – es steht in der DAW neben anderen exportierten Instrumenten, ohne sie zu überschreiben. Die Samples reisen mit.</td></tr>
+  <tr><td>Standalone-App</td><td>Eine App, die das Instrument ohne DAW spielt. Sie zeigt die kompakte Spiel-Oberfläche: Zonen (bei einem Drumset als Pads), Makros, Klaviatur, dazu „Audio …“ für Ausgabegerät und MIDI.</td></tr>
+  <tr><td>Projektdatei .sisp</td><td>Ein Ordner mit Projekt und Samples, zum Weiterbearbeiten oder Weitergeben.</td></tr>
+</table>
+<div class="note warn">Fremde VST3-Effekte sind in exportierten Instrumenten nicht enthalten. Wer sie hören soll, muss sie installiert haben – oder man bounct die Zone vorher.</div>
+
+<h2 id="plugin">Im Plugin (DAW)</h2>
+<p>In der DAW zeigt Sample Instrument Studio ein kompaktes Fenster: Preset-Auswahl, Zonenstreifen (beim Drumset Pads), vier Makro-Drehregler und eine Klaviatur. Doppelklick auf eine Zone öffnet einen Dialog mit ihren Spuren und dem Sample-Editor. <b>Im Studio öffnen</b> übergibt den aktuellen Stand an das Studio – dafür muss es auf dem Rechner mindestens einmal gestartet worden sein.</p>
+<p>Presets des Plugins sind <code>.sisp</code>-Dateien unter Eigene Dokumente / Sample Instrument Studio / Presets.</p>
+
+<h2 id="tasten">Tastenkürzel</h2>
+<table>
+  <tr><th>Taste</th><th>Wirkung</th></tr>
+  <tr><td><kbd>F1</kbd></td><td>Dieses Handbuch</td></tr>
+  <tr><td><kbd>F2</kbd> / <kbd>F3</kbd> / <kbd>F4</kbd></td><td>Mapping / Editor / Export</td></tr>
+  <tr><td><kbd>F9</kbd> / <kbd>F10</kbd></td><td>Linke / rechte Spalte ein- und ausblenden</td></tr>
+  <tr><td><kbd>F12</kbd></td><td>Audio- und MIDI-Einstellungen</td></tr>
+  <tr><td><kbd>Strg</kbd>+<kbd>M</kbd></td><td>Menüleiste ein- und ausblenden</td></tr>
+  <tr><td><kbd>Strg</kbd>+<kbd>N</kbd> / <kbd>O</kbd> / <kbd>S</kbd></td><td>Neu / Öffnen / Speichern; mit <kbd>Shift</kbd>: Speichern unter</td></tr>
+  <tr><td><kbd>Strg</kbd>+<kbd>I</kbd> / <kbd>E</kbd></td><td>Samples importieren / Exportieren</td></tr>
+  <tr><td><kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd></td><td>Rückgängig / Wiederholen</td></tr>
+  <tr><td><kbd>Strg</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd></td><td>Clips kopieren / ausschneiden / am Locator einfügen</td></tr>
+  <tr><td><kbd>Leertaste</kbd></td><td>Wiedergabe ab dem Locator</td></tr>
+  <tr><td><kbd>Entf</kbd></td><td>Gewählte Clips löschen</td></tr>
+  <tr><td><kbd>X</kbd></td><td>Crossfade zwischen zwei gewählten Clips</td></tr>
+  <tr><td><kbd>Esc</kbd></td><td>Clip-Auswahl aufheben, Werkzeugleiste schließen</td></tr>
+  <tr><td><kbd>Shift</kbd>+Klick</td><td>Auswahl erweitern (Clips, Spuren)</td></tr>
+  <tr><td><kbd>Strg</kbd>+Mausrad</td><td>Zoom auf der Zeitachse</td></tr>
+  <tr><td><kbd>Shift</kbd>+Mausrad</td><td>Zeitachse rollen</td></tr>
+  <tr><td><kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd></td><td>Weiße Tasten ab der Oktave der gewählten Zone; <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> <kbd>Z</kbd> <kbd>U</kbd> <kbd>O</kbd> die schwarzen</td></tr>
+</table>
+
+<h2 id="tipps">Tipps und Grenzen</h2>
+<ul>
+  <li><b>Ein Sample, viele Töne:</b> Klassisches Transponieren klingt über wenige Halbtöne natürlich, über eine Oktave hinaus meist nicht mehr. Besser alle paar Töne ein eigenes Sample und dafür schmale Zonen.</li>
+  <li><b>Leise und laut:</b> Zwei Aufnahmen desselben Tons in überlappenden Velocity-Zonen ergeben einen weichen Übergang – siehe <a href="#mapping">Velocity-Schichten</a>.</li>
+  <li><b>Schleifen ohne Naht:</b> „Loop ab“ hinter den Anschlag setzen und etwas X-Fade geben; bei tonalem Material hört man die Naht sonst fast immer.</li>
+  <li><b>Clips ausrichten:</b> für Anschlaggeräusche ein feines Raster (10 ms) und hineinzoomen.</li>
+  <li><b>Zeitachse in Sekunden:</b> Das Studio kennt kein Songtempo – ein Instrument löst Klänge je Note aus, das Tempo bestimmt die DAW.</li>
+  <li>Der Loop-Modus gilt für die ganze Spur. Wer einen Clip loopen und einen anderen einmal spielen will, legt sie auf zwei Spuren.</li>
+</ul>
+</main>
+</div>
+</body>
+</html>

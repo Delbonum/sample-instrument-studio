@@ -7,6 +7,7 @@
 #include "../Source/Export/InstrumentExporter.h"
 #include "../Source/Export/PluginIdentityPatch.h"
 #include "../Source/PluginProcessor.h"
+#include "../Source/UI/Assets.h"
 
 #include <cstdio>
 #include <cstring>
@@ -916,6 +917,26 @@ int main()
     }
 
     file.deleteFile();
+
+    // --- Handbuch: eingebettet und in sich stimmig -------------------------------------
+    section ("Handbuch: eingebettet und in sich stimmig");
+    {
+        const auto manual = sis::manualHtml();
+        expect ("Das Handbuch steckt im Programm", manual.length() > 10000);
+        expect ("Mit Platzhalter für die Version", manual.contains ("{{VERSION}}"));
+        expect ("Umlaute kommen heil an", manual.contains (juce::String::fromUTF8 ("Überblick")));
+
+        // Jeder Verweis im Inhaltsverzeichnis hat sein Ziel
+        int links = 0;
+        for (int at = manual.indexOf ("href=\"#"); at >= 0; at = manual.indexOf (at + 1, "href=\"#"))
+        {
+            const auto target = manual.substring (at + 7).upToFirstOccurrenceOf ("\"", false, false);
+            expect ("Ziel des Verweises vorhanden: " + target, manual.contains ("id=\"" + target + "\""));
+            ++links;
+        }
+
+        expect ("Das Inhaltsverzeichnis ist da", links >= 15);
+    }
 
     std::printf ("%d Prüfungen, %d Fehler\n", checks, failures);
     return failures == 0 ? 0 : 1;

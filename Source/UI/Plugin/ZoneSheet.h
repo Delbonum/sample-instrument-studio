@@ -24,6 +24,9 @@ public:
     /** Knopf „Im Studio bearbeiten“ in der Fußzeile. */
     std::function<void()> onOpenStudio;
 
+    /** In einer exportierten App gibt es kein Studio, in das man wechseln könnte. */
+    void setStudioButtonVisible (bool shouldBeVisible) { studioButton.setVisible (shouldBeVisible); }
+
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseUp (const juce::MouseEvent&) override;

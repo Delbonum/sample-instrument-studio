@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 # Die Programmversion wird hier gepflegt - und nur hier. JUCE macht daraus
 # JucePlugin_VersionString, das Source/Version.h weiterreicht.
-project(SampleInstrumentStudio VERSION 1.14.0 LANGUAGES C CXX)
+project(SampleInstrumentStudio VERSION 1.16.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -119,7 +119,8 @@ juce_add_binary_data(SisBinaryData SOURCES
     assets/fonts/IBMPlexSans-Medium.ttf
     assets/fonts/IBMPlexSans-SemiBold.ttf
     assets/fonts/IBMPlexMono-Regular.ttf
-    assets/fonts/IBMPlexMono-Medium.ttf)
+    assets/fonts/IBMPlexMono-Medium.ttf
+    docs/Handbuch.html)
 
 set_target_properties(SisBinaryData PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 

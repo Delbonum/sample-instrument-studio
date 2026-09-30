@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <limits>
 #include <set>
 
 namespace sis
@@ -558,6 +559,141 @@ int Zone::trackOfClip (juce::uint32 uid) const
             return i;
 
     return -1;
+}
+
+Track& Zone::appendTrack()
+{
+    const auto& colours = trackPalette()[tracks.size() % trackPalette().size()];
+
+    Track track;
+    track.name = "Spur " + juce::String ((int) tracks.size() + 1);
+    track.colour = colours.main;
+    track.softColour = colours.soft;
+    track.gain = 0.8f;
+    tracks.push_back (std::move (track));
+    return tracks.back();
+}
+
+std::vector<ClipboardClip> Zone::copyClips (const std::set<juce::uint32>& uids) const
+{
+    std::vector<ClipboardClip> copied;
+
+    for (int t = 0; t < (int) tracks.size(); ++t)
+        for (const auto& clip : tracks[(size_t) t].clips)
+            if (uids.count (clip.uid) > 0 && clip.hasSample())
+                copied.push_back ({ clip, t });
+
+    if (copied.empty())
+        return copied;
+
+    int topTrack = std::numeric_limits<int>::max();
+    for (const auto& entry : copied)
+        topTrack = juce::jmin (topTrack, entry.trackOffset);
+
+    double base = std::numeric_limits<double>::max();
+    for (const auto& entry : copied)
+        if (entry.trackOffset == topTrack)
+            base = juce::jmin (base, entry.clip.offset);
+
+    for (auto& entry : copied)
+    {
+        entry.clip.offset -= base;
+        entry.trackOffset -= topTrack;
+    }
+
+    return copied;
+}
+
+std::vector<juce::uint32> Zone::pasteClips (const std::vector<ClipboardClip>& clipboard, int targetTrack,
+                                            double at, int* newTracks)
+{
+    std::vector<juce::uint32> pasted;
+    int created = 0;
+    targetTrack = juce::jmax (0, targetTrack);
+
+    double earliest = 0.0;
+    for (const auto& entry : clipboard)
+        earliest = juce::jmin (earliest, entry.clip.offset);
+
+    const double start = juce::jmax (at, -earliest);
+
+    for (const auto& entry : clipboard)
+    {
+        const int row = targetTrack + juce::jmax (0, entry.trackOffset);
+
+        while ((int) tracks.size() <= row)
+        {
+            appendTrack();
+            ++created;
+        }
+
+        auto clip = entry.clip;
+        clip.uid = Clip::nextUid();
+        clip.offset += start;
+        tracks[(size_t) row].clips.push_back (clip);   // obenauf
+        pasted.push_back (clip.uid);
+    }
+
+    if (newTracks != nullptr)
+        *newTracks = created;
+
+    return pasted;
+}
+
+void Zone::moveClips (const std::map<juce::uint32, ClipOrigin>& origins, double timeDelta, int rowDelta,
+                      int& createdTracks)
+{
+    if (origins.empty())
+        return;
+
+    int topRow = std::numeric_limits<int>::max(), bottomRow = 0;
+
+    for (const auto& [uid, from] : origins)
+    {
+        timeDelta = juce::jmax (timeDelta, -from.offset);
+        topRow = juce::jmin (topRow, from.track);
+        bottomRow = juce::jmax (bottomRow, from.track);
+    }
+
+    rowDelta = juce::jmax (rowDelta, -topRow);
+    rowDelta = juce::jmin (rowDelta, (int) tracks.size() - bottomRow);
+
+    const int needed = bottomRow + rowDelta + 1;
+
+    while ((int) tracks.size() < needed)
+    {
+        appendTrack();
+        ++createdTracks;
+    }
+
+    for (const auto& [uid, from] : origins)
+    {
+        const int target = from.track + rowDelta;
+        const int current = trackOfClip (uid);
+
+        if (current < 0)
+            continue;
+
+        if (current != target)
+        {
+            auto& source = tracks[(size_t) current].clips;
+            const auto found = std::find_if (source.begin(), source.end(),
+                                             [id = uid] (const Clip& c) { return c.uid == id; });
+            auto moved = *found;
+            source.erase (found);
+            tracks[(size_t) target].clips.push_back (moved);   // obenauf
+        }
+
+        if (auto* placed = tracks[(size_t) target].findClip (uid))
+            placed->offset = from.offset + timeDelta;
+    }
+
+    // Beim Zurückziehen: im Lauf der Geste entstandene, wieder leere Spuren verschwinden
+    while (createdTracks > 0 && (int) tracks.size() > needed && tracks.back().clips.empty())
+    {
+        tracks.pop_back();
+        --createdTracks;
+    }
 }
 
 juce::uint32 Clip::nextUid() noexcept
@@ -1192,7 +1328,6 @@ juce::ValueTree InstrumentModel::toValueTree() const
             tn.setProperty (id::pan, t.pan, nullptr);
             tn.setProperty (id::pitch, t.pitch, nullptr);
             tn.setProperty (id::cents, t.cents, nullptr);
-            tn.setProperty (id::reverse, t.reverse, nullptr);
             tn.setProperty (id::loop, (int) t.loop, nullptr);
             tn.setProperty (id::loopStart, t.loopStart, nullptr);
             tn.setProperty (id::loopCrossfade, t.loopCrossfade, nullptr);
@@ -1213,6 +1348,8 @@ juce::ValueTree InstrumentModel::toValueTree() const
                 cn.setProperty (id::trimEnd, c.trimEnd, nullptr);
                 cn.setProperty (id::fadeIn, c.fadeIn, nullptr);
                 cn.setProperty (id::fadeOut, c.fadeOut, nullptr);
+                cn.setProperty (id::gain, c.gain, nullptr);
+                cn.setProperty (id::reverse, c.reverse, nullptr);
                 tn.appendChild (cn, nullptr);
             }
 
@@ -1373,7 +1510,10 @@ bool InstrumentModel::fromValueTree (const juce::ValueTree& root, juce::AudioFor
                 t.colour = readColour (tn, id::colour, t.colour);
                 t.softColour = readColour (tn, id::softColour, t.softColour);
 
-                const auto readClip = [] (const juce::ValueTree& node)
+                // Bis 1.15 hing „Umkehren“ an der Spur – dann gilt es für jeden ihrer Clips
+                const bool trackReverse = tn.getProperty (id::reverse, false);
+
+                const auto readClip = [trackReverse] (const juce::ValueTree& node)
                 {
                     Clip c;
                     c.sample = node.getProperty (id::clip).toString();
@@ -1385,6 +1525,12 @@ bool InstrumentModel::fromValueTree (const juce::ValueTree& root, juce::AudioFor
                     c.trimEnd = node.getProperty (id::trimEnd, c.trimEnd);
                     c.fadeIn = node.getProperty (id::fadeIn, c.fadeIn);
                     c.fadeOut = node.getProperty (id::fadeOut, c.fadeOut);
+                    c.reverse = node.getProperty (id::reverse, trackReverse);
+
+                    // In alten Dateien heißt „gain“ an der Spur der Spurpegel – dort nicht lesen
+                    if (node.hasType (id::clipNode))
+                        c.gain = juce::jlimit (0.0f, 16.0f, (float) node.getProperty (id::gain, 1.0f));
+
                     return c;
                 };
 
@@ -1405,7 +1551,6 @@ bool InstrumentModel::fromValueTree (const juce::ValueTree& root, juce::AudioFor
                 t.pan = tn.getProperty (id::pan, t.pan);
                 t.pitch = juce::jlimit (-24, 24, (int) tn.getProperty (id::pitch, t.pitch));
                 t.cents = tn.getProperty (id::cents, t.cents);
-                t.reverse = tn.getProperty (id::reverse, t.reverse);
                 t.loop = readEnum (tn, id::loop, LoopMode::oneShot, 3);
                 t.loopStart = juce::jlimit (0.0, 0.9, (double) tn.getProperty (id::loopStart, 0.0));
                 t.loopCrossfade = juce::jlimit (0.0, 0.5, (double) tn.getProperty (id::loopCrossfade, 0.0));

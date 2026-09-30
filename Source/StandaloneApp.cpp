@@ -30,20 +30,34 @@ public:
         setTitleBarHeight (0);
        #endif
 
+        bool studio = true;
+
         if (auto* editor = holder.processor->createEditorAndMakeActive())
         {
             if (auto* studioEditor = dynamic_cast<StudioEditor*> (editor))
+            {
                 studioEditor->setAudioSettingsCallback ([this] { holder.showAudioSettingsDialog(); });
+                studio = studioEditor->showsStudio();
+            }
 
             setContentOwned (editor, true);
         }
 
-        setResizable (true, false);
-        setResizeLimits (1100, 700, 10000, 10000);
-
         const auto screen = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay();
         const auto userArea = screen != nullptr ? screen->userBounds.toNearestInt() : juce::Rectangle<int> (0, 0, 1440, 900);
-        centreWithSize (juce::jmin (1440, userArea.getWidth()), juce::jmin (900, userArea.getHeight()));
+        setResizable (true, false);
+
+        // Das Studio braucht Platz; die Spiel-Oberfläche einer exportierten App ist kompakt
+        if (studio)
+        {
+            setResizeLimits (1100, 700, 10000, 10000);
+            centreWithSize (juce::jmin (1440, userArea.getWidth()), juce::jmin (900, userArea.getHeight()));
+        }
+        else
+        {
+            setResizeLimits (720, 420, 10000, 10000);
+            centreWithSize (juce::jmin (960, userArea.getWidth()), juce::jmin (560, userArea.getHeight()));
+        }
 
         setVisible (true);
     }

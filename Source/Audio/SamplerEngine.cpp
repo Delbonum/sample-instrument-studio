@@ -250,7 +250,6 @@ void SamplerVoice::prepare (double newSampleRate)
 void SamplerVoice::start (RenderPlan::Ptr plan, const ZonePlan& zone, int midiNote, float velocity,
                           double skipSeconds)
 {
-    const double skip = juce::jmax (0.0, skipSeconds) * sampleRate;
     planReference = std::move (plan);
     note = midiNote;
     velocityGain = juce::jlimit (0.0f, 1.0f, velocity);
@@ -265,11 +264,6 @@ void SamplerVoice::start (RenderPlan::Ptr plan, const ZonePlan& zone, int midiNo
         state.position = 0.0;
         state.outputPosition = 0.0;
         state.finished = false;
-        state.delay = layer.delaySeconds * sampleRate;
-        state.gateStart = juce::jmax (0.0, layer.gateStartSeconds) * sampleRate;
-        state.gateEnd = std::isfinite (layer.gateEndSeconds) ? layer.gateEndSeconds * sampleRate
-                                                             : std::numeric_limits<double>::infinity();
-
         /* Tonhöhe: Abstand zum Grundton, Spur-Tonhöhe und Cent, dazu die Samplerate des
            Samples. Beim Drumset entfällt der Abstand zur Taste – die Spur-Tonhöhe wirkt
            weiter, denn eine um zwei Halbtöne tiefer gestimmte Snare will man auch dort. */
@@ -282,6 +276,19 @@ void SamplerVoice::start (RenderPlan::Ptr plan, const ZonePlan& zone, int midiNo
            das Transponieren, und die Dauer bleibt. */
         const double pace = layer.keepTempo ? sampleRateRatio : state.ratio;
         state.timeRatio = pace / juce::jmax (0.25, layer.stretch);
+
+        /* Die Zeitachse des Editors gilt am Grundton. Klassisch transponiert läuft die ganze
+           Anordnung mit der Tonhöhe schneller oder langsamer – wie ein Tonband: Versätze,
+           verdeckte Abschnitte und der Locator werden mit demselben Faktor gestaucht wie die
+           Clips selbst. Sonst passten Überschneidungen und Crossfades nur am Grundton. Mit
+           gehaltenem Tempo bleibt alles in echten Sekunden. */
+        const double timeline = sampleRate / (layer.keepTempo ? 1.0 : std::pow (2.0, semitones / 12.0));
+
+        state.delay = layer.delaySeconds * timeline;
+        state.gateStart = juce::jmax (0.0, layer.gateStartSeconds) * timeline;
+        state.gateEnd = std::isfinite (layer.gateEndSeconds) ? layer.gateEndSeconds * timeline
+                                                             : std::numeric_limits<double>::infinity();
+        const double skip = juce::jmax (0.0, skipSeconds) * timeline;
 
         /* Ein Abschnitt, der erst später hörbar wird, beginnt gleich dort – das Sample läuft
            innerlich weiter, als hätte es von Anfang an geklungen. */
@@ -565,9 +572,13 @@ void SamplerEngine::noteOn (int note, float velocity)
         return;
 
     const int midiVelocity = juce::jlimit (1, 127, juce::roundToInt (velocity * 127.0f));
-    const auto* zone = activePlan->zoneFor (note, midiVelocity);
 
-    if (zone == nullptr || zone->layers.empty())
+    /* Alle passenden Zonen klingen – überschneiden sie sich im Velocity-Bereich, mit
+       Überblendung (siehe velocityWeight). Jede bekommt ihre eigene Stimme. */
+    std::array<RenderPlan::ZoneMatch, RenderPlan::maxZoneMatches> matches;
+    const int numMatches = activePlan->zonesFor (note, midiVelocity, matches);
+
+    if (numMatches == 0)
         return;
 
     // Eine Wiedergabe ab dem Locator hat ihren Versatz vorher angemeldet – nur für diese Note
@@ -577,9 +588,15 @@ void SamplerEngine::noteOn (int note, float velocity)
     if (startOffsetNote.compare_exchange_strong (expected, -1))
         skipSeconds = startOffsetSeconds.load();
 
-    auto* voice = findFreeVoice();
-    voice->start (activePlan, *zone, note, velocity, skipSeconds);
-    voice->startOrder = ++voiceCounter;
+    for (int i = 0; i < numMatches; ++i)
+    {
+        if (matches[(size_t) i].gain <= 1.0e-4f)
+            continue;
+
+        auto* voice = findFreeVoice();
+        voice->start (activePlan, *matches[(size_t) i].zone, note, velocity * matches[(size_t) i].gain, skipSeconds);
+        voice->startOrder = ++voiceCounter;
+    }
 }
 
 void SamplerEngine::noteOff (int note, bool allowTailOff)

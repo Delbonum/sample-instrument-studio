@@ -137,7 +137,11 @@ Fades; die Tonhöhe (Abstand zum Grundton + Spur-Halbtöne + Cent) gilt für die
 deshalb in die Abschnitte, in denen er zu hören ist (`geometry::audibleSegments`), und legt
 je Abschnitt eine Schicht mit `gateStart/EndSeconds` an; an inneren Kanten wird 3 ms
 geblendet, damit nichts knackt. Eine Schleife klingt bis zum nächsten Clip der Spur. Die Hüllkurve des Instruments gilt für die
-ganze Stimme. Die Anschlagstärke wählt die Zone und skaliert den Pegel.
+ganze Stimme. Die Anschlagstärke wählt die Zonen und skaliert den Pegel: **alle** passenden
+Zonen klingen, jede in einer eigenen Stimme. Überschneiden sie sich im Velocity-Bereich,
+gewichtet `velocityWeight` (`RenderPlan.h`) sie mit gleicher Leistung – die untere blendet
+über den gemeinsamen Bereich aus, die obere ein; liegt eine ganz in der anderen, klingen beide
+voll. Zonen ohne Spuren zählen dabei nicht mit.
 
 **Time-Stretch:** Bei Stretch 1,00× wird direkt abgespielt. Sonst legt die Engine überlappende
 Körner (halbe Kornlänge Versatz, Hann-Fenster) aneinander: der Lesezeiger innerhalb eines Korns

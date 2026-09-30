@@ -23,6 +23,10 @@ private:
 /** IBM Plex Sans, Größe in CSS-Pixeln (em-Größe). */
 juce::Font sansFont (float size, Weight = Weight::regular);
 
+/** Das Handbuch (docs/Handbuch.html), eingebettet wie Icon und Schriften – damit F1 in jeder
+    Installation und jedem Export funktioniert. `{{VERSION}}` steht darin für die Version. */
+juce::String manualHtml();
+
 /** IBM Plex Mono, Größe in CSS-Pixeln. */
 juce::Font monoFont (float size, Weight = Weight::regular);
 

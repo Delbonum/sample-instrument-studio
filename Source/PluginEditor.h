@@ -19,6 +19,9 @@ public:
     /** Nur Standalone: Callback für "Datei → Audio-Einstellungen …". */
     void setAudioSettingsCallback (std::function<void()>);
 
+    /** Ob das volle Studio gezeigt wird (sonst die kompakte Spiel-Oberfläche). */
+    bool showsStudio() const noexcept { return studio != nullptr; }
+
     void paint (juce::Graphics&) override;
     void resized() override;
 

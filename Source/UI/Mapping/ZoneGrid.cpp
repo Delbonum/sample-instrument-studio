@@ -29,6 +29,21 @@ juce::Rectangle<float> ZoneGrid::getInnerArea() const
 juce::Rectangle<float> ZoneGrid::getZoneBounds (const Zone& z) const
 {
     const auto area = getInnerArea();
+
+    /* Drumset: ein Kit-Teil ist nur eine Taste breit und wäre als Faden kaum zu treffen.
+       Deshalb gleich breite Pads nebeneinander, nach Note geordnet (so in der Plugin-Ansicht;
+       im Mapping zeigt ein Drumset ohnehin das gezeichnete Kit). */
+    if (model.kind == InstrumentKind::drumKit && ! model.zones.empty())
+    {
+        int index = 0;
+        for (const auto& other : model.zones)
+            if (other.lowNote < z.lowNote || (other.lowNote == z.lowNote && &other < &z))
+                ++index;
+
+        const float width = area.getWidth() / (float) model.zones.size();
+        return { area.getX() + (float) index * width, area.getY(), width, area.getHeight() };
+    }
+
     constexpr float span = (float) InstrumentModel::numNotes;
 
     const float left = (float) (z.lowNote - InstrumentModel::lowestNote) / span;
@@ -60,7 +75,11 @@ int ZoneGrid::velocityAt (float y) const
 
 const Zone* ZoneGrid::zoneAt (juce::Point<float> p) const
 {
-    // Zuletzt gezeichnete Zone liegt oben
+    // Die gewählte Zone liegt obenauf, danach gilt: zuletzt gezeichnet liegt oben
+    if (const auto* selected = model.getSelectedZone())
+        if (getZoneBounds (*selected).contains (p))
+            return selected;
+
     for (auto it = model.zones.rbegin(); it != model.zones.rend(); ++it)
         if (getZoneBounds (*it).contains (p))
             return &*it;
@@ -75,9 +94,9 @@ void ZoneGrid::paint (juce::Graphics& g)
     g.setColour (colours::surface);
     g.fillRect (bounds);
 
-    // Oktav-Trennlinien
+    // Oktav-Trennlinien – nicht bei den Pads eines Drumsets, dort gibt es keine Tastenachse
     g.setColour (colours::divider);
-    for (int octave = 1; octave < InstrumentModel::numNotes / 12; ++octave)
+    for (int octave = 1; model.kind != InstrumentKind::drumKit && octave < InstrumentModel::numNotes / 12; ++octave)
     {
         const float x = area.getX() + area.getWidth() * (float) (octave * 12) / (float) InstrumentModel::numNotes;
         g.fillRect (juce::Rectangle<float> (std::floor (x), area.getY(), 1.0f, area.getHeight()));
@@ -96,8 +115,18 @@ void ZoneGrid::paint (juce::Graphics& g)
         const auto nameFont = sansFont (11.5f, Weight::medium);
         const auto infoFont = monoFont (10.0f);
 
+        /* Die gewählte Zone zuletzt, also obenauf: überschneiden sich Zonen, soll die, an
+           der man gerade arbeitet, mit Name und Marke sichtbar bleiben. */
+        std::vector<const Zone*> order;
         for (const auto& z : model.zones)
+            if (z.id != model.selectedZoneId)
+                order.push_back (&z);
+        if (const auto* selectedZone = model.getSelectedZone())
+            order.push_back (selectedZone);
+
+        for (const auto* zone : order)
         {
+            const auto& z = *zone;
             const bool selected = z.id == model.selectedZoneId;
             const auto r = getZoneBounds (z);
 
@@ -129,7 +158,8 @@ void ZoneGrid::paint (juce::Graphics& g)
                     text.removeFromRight (18.0f);
                 }
 
-                if (r.getHeight() >= 48.0f)
+                // Nur, wenn sie unter Name und Infozeile passt (im flachen Streifen der Plugin-Ansicht nicht)
+                if (r.getHeight() >= 72.0f)
                 {
                     for (int i = 0; i < (int) z.tracks.size(); ++i)
                     {
@@ -150,16 +180,47 @@ void ZoneGrid::paint (juce::Graphics& g)
             g.setFont (nameFont);
             g.drawText (z.name, text.removeFromTop (16.0f), juce::Justification::centredLeft, true);
 
-            // Zusatzzeile nur bei ausreichender Breite (≥ 17 % der Achse)
+            // Zusatzzeile nur bei ausreichender Breite (≥ 17 % der Achse, als Pad ≥ 90 px)
             const float widthShare = (float) (z.highNote - z.lowNote + 1) / (float) InstrumentModel::numNotes;
-            if (widthShare >= 0.17f)
+            const bool isPad = model.kind == InstrumentKind::drumKit;
+            if (isPad ? r.getWidth() >= 90.0f : widthShare >= 0.17f)
             {
                 text.removeFromTop (2.0f);
                 g.setColour (colours::textSecondary);
                 g.setFont (infoFont);
-                g.drawText (noteName (z.lowNote) + "–"_u + noteName (z.highNote) + " · "_u
-                                + juce::String (z.numSamples()) + " Smp",
+                g.drawText ((isPad ? noteName (z.lowNote) : noteName (z.lowNote) + "–"_u + noteName (z.highNote))
+                                + " · "_u + juce::String (z.numSamples()) + " Smp",
                             text.removeFromTop (14.0f), juce::Justification::centredLeft, true);
+            }
+        }
+    }
+
+    /* Wo sich zwei Zonen in Tasten und Velocity überschneiden, klingen beide – mit
+       Überblendung über den gemeinsamen Velocity-Bereich. Die Fläche wird schraffiert, wie
+       überlappende Clips im Editor. */
+    if (ui.velocityLayers && model.kind != InstrumentKind::drumKit)
+    {
+        const juce::Graphics::ScopedSaveState state (g);
+        g.reduceClipRegion (area.toNearestInt());
+
+        for (size_t a = 0; a < model.zones.size(); ++a)
+        {
+            for (size_t b = a + 1; b < model.zones.size(); ++b)
+            {
+                const auto overlap = getZoneBounds (model.zones[a]).getIntersection (getZoneBounds (model.zones[b]));
+
+                if (overlap.getWidth() < 1.0f || overlap.getHeight() < 1.0f)
+                    continue;
+
+                const juce::Graphics::ScopedSaveState hatch (g);
+                g.reduceClipRegion (overlap.toNearestInt());
+                g.setColour (colours::accent.withAlpha (0.35f));
+
+                for (float x = overlap.getX() - overlap.getHeight(); x < overlap.getRight(); x += 7.0f)
+                    g.drawLine (x, overlap.getBottom(), x + overlap.getHeight(), overlap.getY(), 1.0f);
+
+                g.setColour (colours::accent);
+                g.drawRect (overlap, 1.0f);
             }
         }
     }

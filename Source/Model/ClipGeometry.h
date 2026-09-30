@@ -33,25 +33,26 @@ struct ClipState
     double end() const { return offset + length(); }
 };
 
-inline double snapTime (double value, bool snapToGrid)
+/** Rastet auf ein Vielfaches von `grid` (Anteil der Achse) ein; Voreinstellung 1/16. */
+inline double snapTime (double value, bool snapToGrid, double grid = 1.0 / gridDivision)
 {
-    return snapToGrid ? std::round (value * gridDivision) / gridDivision : value;
+    return snapToGrid && grid > 0.0 ? std::round (value / grid) * grid : value;
 }
 
 /** Körper ziehen: verschiebt den Clip, ohne ihn zu verändern. */
 inline ClipState moveClip (ClipState clip, double pointerTime, double grabOffset, bool snapToGrid,
-                           double limit = 1.0)
+                           double limit = 1.0, double grid = 1.0 / gridDivision)
 {
     const double length = std::max (minClipLength, clip.length());
-    clip.offset = std::clamp (snapTime (pointerTime - grabOffset, snapToGrid), 0.0, std::max (0.0, limit - length));
+    clip.offset = std::clamp (snapTime (pointerTime - grabOffset, snapToGrid, grid), 0.0, std::max (0.0, limit - length));
     return clip;
 }
 
 /** Rechte Kante ziehen: schneidet zu oder streckt; der Clip-Anfang bleibt stehen. */
 inline ClipState dragRightEdge (ClipState clip, double pointerTime, bool snapToGrid, bool stretching,
-                                double limit = 1.0)
+                                double limit = 1.0, double grid = 1.0 / gridDivision)
 {
-    const double newLength = std::clamp (snapTime (pointerTime, snapToGrid) - clip.offset,
+    const double newLength = std::clamp (snapTime (pointerTime, snapToGrid, grid) - clip.offset,
                                          minClipLength, std::max (minClipLength, limit - clip.offset));
 
     if (stretching)
@@ -70,10 +71,11 @@ inline ClipState dragRightEdge (ClipState clip, double pointerTime, bool snapToG
 }
 
 /** Linke Kante ziehen: das rechte Clip-Ende bleibt stehen, `offset` wandert mit. */
-inline ClipState dragLeftEdge (ClipState clip, double pointerTime, bool snapToGrid, bool stretching)
+inline ClipState dragLeftEdge (ClipState clip, double pointerTime, bool snapToGrid, bool stretching,
+                               double grid = 1.0 / gridDivision)
 {
     const double end = clip.end();
-    const double newStart = std::clamp (snapTime (pointerTime, snapToGrid), 0.0, end - minClipLength);
+    const double newStart = std::clamp (snapTime (pointerTime, snapToGrid, grid), 0.0, end - minClipLength);
     const double newLength = end - newStart;
 
     if (stretching)

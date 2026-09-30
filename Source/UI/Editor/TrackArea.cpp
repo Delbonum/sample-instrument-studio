@@ -44,19 +44,6 @@ namespace
                           : juce::String (count) + " " + juce::String::fromUTF8 (many);
     }
 
-    /** Neue, leere Spur unten an der Zone – beim Einfügen, Ziehen und Hineinziehen. */
-    Track& appendTrack (Zone& zone)
-    {
-        const auto& colours = trackPalette()[zone.tracks.size() % trackPalette().size()];
-
-        Track track;
-        track.name = "Spur " + juce::String ((int) zone.tracks.size() + 1);
-        track.colour = colours.main;
-        track.softColour = colours.soft;
-        track.gain = 0.8f;
-        zone.tracks.push_back (std::move (track));
-        return zone.tracks.back();
-    }
 }
 
 TrackArea::TrackArea (StudioContext& c) : ctx (c)
@@ -102,12 +89,51 @@ float TrackArea::laneWidth() const
 
 float TrackArea::timeToX (double time) const
 {
-    return (float) headerWidth + (float) (time - ctx.ui.timelineStart) * laneWidth();
+    return (float) headerWidth + (float) ((time - ctx.ui.timelineStart) / ctx.ui.visibleLength) * laneWidth();
 }
 
 double TrackArea::xToTime (float x) const
 {
-    return ctx.ui.timelineStart + (double) ((x - (float) headerWidth) / laneWidth());
+    return ctx.ui.timelineStart + (double) ((x - (float) headerWidth) / laneWidth()) * ctx.ui.visibleLength;
+}
+
+double TrackArea::tickStepSeconds (double pixelsPerSecond, double minPixels)
+{
+    static constexpr double steps[] = { 0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0 };
+
+    for (const double step : steps)
+        if (step * pixelsPerSecond >= minPixels)
+            return step;
+
+    return 60.0;
+}
+
+juce::String TrackArea::timeLabel (double seconds, double step)
+{
+    if (step < 0.1 && seconds < 1.0)
+        return juce::String (juce::roundToInt (seconds * 1000.0)) + " ms";
+
+    const int decimals = step >= 1.0 ? 0 : (step >= 0.1 ? 1 : 2);
+    return juce::String (seconds, decimals) + " s";
+}
+
+double TrackArea::snapped (double time) const
+{
+    return geometry::snapTime (time, ctx.ui.snapToGrid, ctx.ui.gridSeconds / InstrumentModel::timelineSeconds);
+}
+
+void TrackArea::zoomBy (double factor, double anchor)
+{
+    const double before = ctx.ui.visibleLength;
+    const double after = juce::jlimit (UiState::minVisibleLength, UiState::maxVisibleLength, before * factor);
+
+    if (std::abs (after - before) < 1.0e-9)
+        return;
+
+    // Die Stelle unter dem Zeiger bleibt stehen
+    ctx.ui.timelineStart = juce::jmax (0.0, anchor - (anchor - ctx.ui.timelineStart) * after / before);
+    ctx.ui.visibleLength = after;
+    ctx.ui.changed();
 }
 
 juce::Rectangle<int> TrackArea::getRowBounds (int index) const
@@ -140,7 +166,7 @@ juce::Rectangle<float> TrackArea::getClipBounds (int trackIndex, int clipIndex) 
     const auto length = juce::jmax (0.005, clip.length());
 
     return { timeToX (clip.offset), lane.getY() + (float) clipInset,
-             (float) length * laneWidth(), lane.getHeight() - 2.0f * (float) clipInset };
+             (float) (length / ctx.ui.visibleLength) * laneWidth(), lane.getHeight() - 2.0f * (float) clipInset };
 }
 
 juce::Rectangle<int> TrackArea::getMuteBounds (int index) const
@@ -261,7 +287,14 @@ void TrackArea::paintClip (juce::Graphics& g, const Track& track, int trackIndex
 
         auto headerText = header.withLeft (juce::jmax (header.getX(), (float) lane.getX())).reduced (5.0f, 0.0f);
         headerText.setRight (juce::jmin (headerText.getRight(), visibleEnd - 5.0f));
-        const auto badge = juce::String (data.stretch, 2) + juce::String::fromUTF8 ("×");
+        // Stretch-Faktor, davor der Pegel des Clips, falls er normalisiert ist
+        auto badge = juce::String (data.stretch, 2) + juce::String::fromUTF8 ("×");
+
+        if (std::abs (data.gain - 1.0f) > 0.001f)
+        {
+            const auto db = juce::Decibels::gainToDecibels (data.gain);
+            badge = (db >= 0.0f ? "+" : "") + juce::String (db, 1) + " dB · "_u + badge;
+        }
         const float badgeWidth = textWidth (monoFont (10.0f), badge) + 6.0f;
         g.setColour (colours::white.withMultipliedAlpha (alpha));
         g.setFont (monoFont (10.0f));
@@ -274,7 +307,7 @@ void TrackArea::paintClip (juce::Graphics& g, const Track& track, int trackIndex
         const int from = juce::jlimit (0, total - 1, (int) (data.trimStart * (total - 1)));
         const int to = juce::jlimit (from + 1, total - 1, (int) (data.trimEnd * (total - 1)));
         std::vector<float> slice (peaks.begin() + from, peaks.begin() + to + 1);
-        if (track.reverse)
+        if (data.reverse)
             std::reverse (slice.begin(), slice.end());
 
         auto waveArea = clip.withTrimmedTop ((float) clipHeaderHeight).reduced (0.0f, 4.0f);
@@ -418,15 +451,18 @@ void TrackArea::paint (juce::Graphics& g)
             const juce::Graphics::ScopedSaveState laneState (g);
             g.reduceClipRegion (lane);
 
-            // Rasterlinien je Sekunde
+            // Rasterlinien im Abstand der Lineal-Striche – mit dem Zoom feiner oder gröber
             g.setColour (colours::lineFine);
-            const double start = ctx.ui.timelineStart;
-            for (int s = (int) std::ceil (start * InstrumentModel::timelineSeconds); ; ++s)
+            const double secondsVisible = ctx.ui.visibleLength * InstrumentModel::timelineSeconds;
+            const double step = tickStepSeconds ((double) laneWidth() / secondsVisible);
+            const double startSeconds = ctx.ui.timelineStart * InstrumentModel::timelineSeconds;
+
+            for (auto n = (juce::int64) std::ceil (startSeconds / step); ; ++n)
             {
-                const float x = timeToX (s / InstrumentModel::timelineSeconds);
+                const float x = timeToX ((double) n * step / InstrumentModel::timelineSeconds);
                 if (x > visibleEnd)
                     break;
-                if (s > 0)
+                if (n > 0)
                     g.fillRect (juce::Rectangle<float> (std::round (x), (float) lane.getY(), 1.0f, (float) lane.getHeight()));
             }
 
@@ -523,7 +559,7 @@ void TrackArea::paint (juce::Graphics& g)
         g.reduceClipRegion (lane);
 
         const juce::Rectangle<float> ghost (timeToX (dropTime), (float) (lane.getY() + clipInset),
-                                            juce::jmax (4.0f, (float) dropLength * laneWidth()),
+                                            juce::jmax (4.0f, (float) (dropLength / ctx.ui.visibleLength) * laneWidth()),
                                             (float) (lane.getHeight() - 2 * clipInset));
         g.setColour (colours::accent.withAlpha (0.18f));
         g.fillRect (ghost);
@@ -568,7 +604,7 @@ void TrackArea::mouseMove (const juce::MouseEvent& e)
             newCursor = toolIcons::cursorFor (ctx.ui.editTool);
 
             if (ctx.ui.editTool == EditTool::split && row >= 0 && hitAt (row, e.getPosition()).clip >= 0)
-                hoverTime = geometry::snapTime (positionToTime (e.x), ctx.ui.snapToGrid);
+                hoverTime = snapped (positionToTime (e.x));
         }
         else if (row >= 0)
         {
@@ -757,9 +793,9 @@ void TrackArea::mouseDrag (const juce::MouseEvent& e)
 
     // Am Rand weiterrollen, damit ein Clip über den sichtbaren Ausschnitt hinaus gezogen werden kann
     if (e.x > getWidth() - 16)
-        scrollBy (0.02);
+        scrollBy (0.02 * ctx.ui.visibleLength);
     else if (e.x < headerWidth + 8 && ctx.ui.timelineStart > 0.0)
-        scrollBy (-0.02);
+        scrollBy (-0.02 * ctx.ui.visibleLength);
 
     applyDrag (e);
 }
@@ -873,11 +909,18 @@ void TrackArea::finishRename (bool keep)
 
 void TrackArea::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel)
 {
-    // Waagerecht wischen oder Shift+Rad rollt die Zeit, alles andere die Spuren
+    // Strg+Rad zoomt um den Zeiger, waagerecht wischen oder Shift+Rad rollt die Zeit
+    if (e.mods.isCommandDown())
+    {
+        if (e.x >= headerWidth)
+            zoomBy (wheel.deltaY > 0.0f ? 0.8 : 1.25, positionToTime (e.x));
+        return;
+    }
+
     if (wheel.deltaX != 0.0f || e.mods.isShiftDown())
     {
         const float delta = wheel.deltaX != 0.0f ? -wheel.deltaX : -wheel.deltaY;
-        scrollBy ((double) delta * 0.5);
+        scrollBy ((double) delta * 0.5 * ctx.ui.visibleLength);
         return;
     }
 
@@ -886,8 +929,9 @@ void TrackArea::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWhee
 
 void TrackArea::scrollBy (double delta)
 {
-    const double limit = juce::jmax (0.0, juce::jmax (axisLength (getZone()), ctx.ui.timelineStart + 1.0) - 1.0);
-    const double next = juce::jlimit (0.0, juce::jmax (limit, drag != Drag::none ? maxAxis - 1.0 : 0.0),
+    const double shown = ctx.ui.visibleLength;
+    const double limit = juce::jmax (0.0, juce::jmax (axisLength (getZone()), ctx.ui.timelineStart + shown) - shown);
+    const double next = juce::jlimit (0.0, juce::jmax (limit, drag != Drag::none ? maxAxis - shown : 0.0),
                                       ctx.ui.timelineStart + delta);
 
     if (std::abs (next - ctx.ui.timelineStart) > 1.0e-9)
@@ -940,14 +984,15 @@ void TrackArea::applyDrag (const juce::MouseEvent& e)
     const double pointerTime = positionToTime (e.x);
     const bool snapping = ctx.ui.snapToGrid;
     const bool stretching = isStretching (e);
+    const double grid = ctx.ui.gridSeconds / InstrumentModel::timelineSeconds;
 
     auto state = toState (*clip);
 
     switch (drag)
     {
-        case Drag::move:      state = geometry::moveClip (state, pointerTime, grabOffset, snapping, maxAxis); break;
-        case Drag::rightEdge: state = geometry::dragRightEdge (state, pointerTime, snapping, stretching, maxAxis); break;
-        case Drag::leftEdge:  state = geometry::dragLeftEdge (state, pointerTime, snapping, stretching); break;
+        case Drag::move:      state = geometry::moveClip (state, pointerTime, grabOffset, snapping, maxAxis, grid); break;
+        case Drag::rightEdge: state = geometry::dragRightEdge (state, pointerTime, snapping, stretching, maxAxis, grid); break;
+        case Drag::leftEdge:  state = geometry::dragLeftEdge (state, pointerTime, snapping, stretching, grid); break;
         case Drag::fadeIn:    state = geometry::dragFadeIn (state, pointerTime); break;
         case Drag::fadeOut:   state = geometry::dragFadeOut (state, pointerTime); break;
         case Drag::none:
@@ -976,63 +1021,13 @@ void TrackArea::applyDrag (const juce::MouseEvent& e)
         return;
     }
 
-    /* Waagerecht: alle gewählten Clips wandern um dasselbe Stück, keiner vor den Anfang
-       der Achse. */
+    /* Waagerecht um dasselbe Stück wie der gegriffene Clip, senkrecht um so viele Spuren,
+       wie der Zeiger gewandert ist. Grenzen und neue Spuren regelt das Modell. */
     const auto grabbed = moveOrigins.find (dragClip);
     const double origin = grabbed != moveOrigins.end() ? grabbed->second.offset : clip->offset;
-    double delta = state.offset - origin;
-
-    int topRow = std::numeric_limits<int>::max(), bottomRow = 0;
-
-    for (const auto& [uid, from] : moveOrigins)
-    {
-        delta = juce::jmax (delta, -from.offset);
-        topRow = juce::jmin (topRow, from.track);
-        bottomRow = juce::jmax (bottomRow, from.track);
-    }
-
-    /* Senkrecht: um so viele Spuren, wie der Zeiger gewandert ist – nicht über die erste
-       hinaus, und unten höchstens eine Spur hinter die letzte. Dorthin gezogen, entsteht
-       sie; wieder zurückgezogen, verschwindet sie, solange nichts anderes darauf liegt. */
     const int pointerRow = e.y < 0 ? 0 : e.y / (rowHeight + 1);
-    int rowDelta = juce::jmax (pointerRow - dragStartRow, -topRow);
-    rowDelta = juce::jmin (rowDelta, (int) zone->tracks.size() - bottomRow);
 
-    const int needed = bottomRow + rowDelta + 1;
-
-    while ((int) zone->tracks.size() < needed)
-    {
-        appendTrack (*zone);
-        ++createdTracks;
-    }
-
-    // Zeiger auf Spuren und Clips gelten ab hier nicht mehr – nur noch über die Kennung
-    for (const auto& [uid, from] : moveOrigins)
-    {
-        const int target = from.track + rowDelta;
-        const int current = zone->trackOfClip (uid);
-
-        if (current < 0)
-            continue;
-
-        if (current != target)
-        {
-            auto& source = zone->tracks[(size_t) current].clips;
-            const auto found = std::find_if (source.begin(), source.end(), [uid = uid] (const Clip& c) { return c.uid == uid; });
-            auto moved = *found;
-            source.erase (found);
-            zone->tracks[(size_t) target].clips.push_back (moved);   // obenauf
-        }
-
-        if (auto* placed = zone->tracks[(size_t) target].findClip (uid))
-            placed->offset = from.offset + delta;
-    }
-
-    while (createdTracks > 0 && (int) zone->tracks.size() > needed && zone->tracks.back().clips.empty())
-    {
-        zone->tracks.pop_back();
-        --createdTracks;
-    }
+    zone->moveClips (moveOrigins, state.offset - origin, pointerRow - dragStartRow, createdTracks);
 
     // Die Spur des gezogenen Clips ist die gewählte – Inspektor und Einfügen folgen ihr
     dragTrack = zone->trackOfClip (dragClip);
@@ -1214,7 +1209,7 @@ void TrackArea::splitClipAt (int trackIndex, juce::Point<int> position)
 
     auto& clips = zone->tracks[(size_t) trackIndex].clips;
     auto& original = clips[(size_t) hit.clip];
-    const double time = geometry::snapTime (positionToTime (position.x), ctx.ui.snapToGrid);
+    const double time = snapped (positionToTime (position.x));
 
     geometry::ClipState left, right;
 
@@ -1331,35 +1326,12 @@ void TrackArea::showTrackMenu (int trackIndex)
 void TrackArea::copyClips()
 {
     auto* zone = getZone();
-    std::vector<ClipboardClip> copied;
-
-    if (zone != nullptr)
-        for (int t = 0; t < (int) zone->tracks.size(); ++t)
-            for (const auto& clip : zone->tracks[(size_t) t].clips)
-                if (ctx.ui.isClipSelected (clip.uid) && clip.hasSample())
-                    copied.push_back ({ clip, t });
+    auto copied = zone != nullptr ? zone->copyClips (ctx.ui.selectedClips) : std::vector<ClipboardClip>();
 
     if (copied.empty())
     {
         ctx.toast ("Kein Clip gewählt"_u);
         return;
-    }
-
-    /* Bezug ist der früheste Clip der obersten Spur: er landet beim Einfügen am Locator auf
-       der gewählten Spur. Alle anderen behalten Zeit- und Spurabstand zu ihm. */
-    int topTrack = std::numeric_limits<int>::max();
-    for (const auto& entry : copied)
-        topTrack = juce::jmin (topTrack, entry.trackOffset);
-
-    double base = std::numeric_limits<double>::max();
-    for (const auto& entry : copied)
-        if (entry.trackOffset == topTrack)
-            base = juce::jmin (base, entry.clip.offset);
-
-    for (auto& entry : copied)
-    {
-        entry.clip.offset -= base;
-        entry.trackOffset -= topTrack;
     }
 
     ctx.ui.clipboard = std::move (copied);
@@ -1407,38 +1379,13 @@ void TrackArea::pasteClips()
         return;
     }
 
-    const int targetTrack = zone->selectedTrack;
-
-    // Liegt ein Clip vor dem Bezugsclip, rückt alles so weit nach rechts, dass er bei 0 beginnt
-    double earliest = 0.0;
-    for (const auto& entry : ctx.ui.clipboard)
-        earliest = juce::jmin (earliest, entry.clip.offset);
-
-    const double start = juce::jmax (ctx.ui.locator, -earliest);
-
     ctx.step ("Eingefügt"_u);
-    ctx.ui.selectedClips.clear();
 
     int newTracks = 0;
+    const auto pasted = zone->pasteClips (ctx.ui.clipboard, zone->selectedTrack, ctx.ui.locator, &newTracks);
 
-    for (const auto& entry : ctx.ui.clipboard)
-    {
-        const int row = targetTrack + entry.trackOffset;
-
-        // Spuren, die es darunter noch nicht gibt, entstehen
-        while ((int) zone->tracks.size() <= row)
-        {
-            appendTrack (*zone);
-            ++newTracks;
-        }
-
-        auto clip = entry.clip;
-        clip.uid = Clip::nextUid();
-        clip.offset += start;
-        zone->tracks[(size_t) row].clips.push_back (clip);   // obenauf
-        ctx.ui.selectedClips.insert (clip.uid);
-        ctx.ui.focusClip = clip.uid;
-    }
+    ctx.ui.selectedClips = { pasted.begin(), pasted.end() };
+    ctx.ui.focusClip = pasted.empty() ? 0 : pasted.back();
 
     ctx.model.notifyChanged();
     ctx.ui.changed();
@@ -1526,7 +1473,7 @@ void TrackArea::itemDragMove (const SourceDetails& details)
         if (juce::isPositiveAndBelow (index, (int) ctx.model.samples.size()))
             dropLength = ctx.model.samples[(size_t) index].lengthSeconds / InstrumentModel::timelineSeconds;
 
-        dropTime = geometry::snapTime (positionToTime (details.localPosition.x), ctx.ui.snapToGrid);
+        dropTime = snapped (positionToTime (details.localPosition.x));
     }
 
     repaint();
@@ -1560,7 +1507,7 @@ void TrackArea::itemDropped (const SourceDetails& details)
 
     const double length = sample->lengthSeconds / InstrumentModel::timelineSeconds;
     const double time = juce::jlimit (0.0, juce::jmax (0.0, maxAxis - length),
-                                      geometry::snapTime (positionToTime (details.localPosition.x), ctx.ui.snapToGrid));
+                                      snapped (positionToTime (details.localPosition.x)));
     const int row = details.localPosition.y / (rowHeight + 1);
 
     ctx.step (sample->name + " eingefügt"_u);
@@ -1570,7 +1517,7 @@ void TrackArea::itemDropped (const SourceDetails& details)
     if (! juce::isPositiveAndBelow (row, (int) zone->tracks.size()))
     {
         // Unter die letzte Spur: neue Spur
-        appendTrack (*zone);
+        zone->appendTrack();
         target = (int) zone->tracks.size() - 1;
     }
 
@@ -1617,9 +1564,9 @@ void TrackArea::timerCallback()
     // Die Laufmarke nicht aus dem Bild laufen lassen: umblättern, sobald sie den Rand erreicht
     const double start = ctx.ui.timelineStart;
 
-    if (ctx.ui.playing && (ctx.ui.playhead > start + 1.0 || ctx.ui.playhead < start))
+    if (ctx.ui.playing && (ctx.ui.playhead > start + ctx.ui.visibleLength || ctx.ui.playhead < start))
     {
-        ctx.ui.timelineStart = juce::jmax (0.0, ctx.ui.playhead - 0.05);
+        ctx.ui.timelineStart = juce::jmax (0.0, ctx.ui.playhead - 0.05 * ctx.ui.visibleLength);
         ctx.ui.changed();
     }
 

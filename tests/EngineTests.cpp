@@ -12,6 +12,7 @@
 #include "../Source/Model/PresetLibrary.h"
 
 #include <cmath>
+#include <map>
 #include <set>
 #include <cstdio>
 
@@ -2803,6 +2804,277 @@ int main()
         sis::InstrumentModel loaded;
         loaded.fromValueTree (heldModel->toValueTree(), formats);
         expect ("Der Schalter übersteht das Speichern", loaded.zones.front().tracks.front().keepTempo);
+    }
+
+    // --- Klassisch transponiert läuft die ganze Anordnung schneller ----------------------
+    {
+        sis::SampleCache cache;
+        cache.insert (makeConstantSample ("low.wav", 48000, 0.25f));
+        cache.insert (makeConstantSample ("high.wav", 48000, 1.0f));
+
+        const auto clipOf = [] (const juce::String& name, double startSeconds)
+        {
+            sis::Clip c;
+            c.sample = name;
+            c.natural = 1.0 / sis::InstrumentModel::timelineSeconds;
+            c.offset = startSeconds / sis::InstrumentModel::timelineSeconds;
+            return c;
+        };
+
+        auto track = makeTrack ("low.wav");
+        track.loop = sis::LoopMode::oneShot;
+        track.clips = { clipOf ("low.wav", 0.0), clipOf ("high.wav", 0.5) };
+
+        // Eine Oktave höher: alles doppelt so schnell – high übernimmt schon bei 0,25 s
+        auto model = makeModel ({ track });
+        auto engine = makeEngine (*model, cache);
+        const auto octave = render (*engine, 48000, 72, 1.0f);
+        expectNear ("Vor der Übernahme klingt low", octave.at (9000), 0.25, 0.01);
+        expectNear ("Ab 0,25 s klingt high (die Übernahme ist mitgewandert)", octave.at (15000), 1.0, 0.01);
+        expect ("Nach 0,75 s ist Ruhe (auch high läuft doppelt so schnell)", octave.peak (37000, 10000) < 0.001f);
+
+        // Mit gehaltenem Tempo bleibt die Anordnung in echten Sekunden
+        auto held = track;
+        held.keepTempo = true;
+        auto heldModel = makeModel ({ held });
+        auto heldEngine = makeEngine (*heldModel, cache);
+        const auto heldOut = render (*heldEngine, 48000, 72, 1.0f);
+        expectNear ("Mit gehaltenem Tempo klingt bei 0,3 s noch low", heldOut.at (14400), 0.25, 0.02);
+        expectNear ("Und ab 0,5 s high", heldOut.at (30000), 1.0, 0.05);
+    }
+
+    // --- Zwischenablage und Verschieben über Spuren (Modell) -----------------------------
+    {
+        sis::Zone zone;
+        zone.tracks.resize (2);
+
+        const auto clipAt = [] (const juce::String& name, double offset)
+        {
+            sis::Clip c;
+            c.sample = name;
+            c.offset = offset;
+            c.natural = 0.1;
+            return c;
+        };
+
+        zone.tracks[0].clips = { clipAt ("a.wav", 0.30), clipAt ("b.wav", 0.10) };
+        zone.tracks[1].clips = { clipAt ("c.wav", 0.05) };
+
+        const std::set<juce::uint32> all { zone.tracks[0].clips[0].uid, zone.tracks[0].clips[1].uid,
+                                           zone.tracks[1].clips[0].uid };
+        const auto copied = zone.copyClips (all);
+
+        expect ("Drei Clips kopiert", copied.size() == 3);
+
+        // Bezug: der früheste Clip der obersten Spur (b bei 0,10)
+        for (const auto& entry : copied)
+        {
+            if (entry.clip.sample == "b.wav")
+                expect ("Der Bezugsclip hat Zeit 0 und Spur 0", entry.clip.offset == 0.0 && entry.trackOffset == 0);
+            if (entry.clip.sample == "a.wav")
+                expectNear ("a bleibt 0,2 hinter dem Bezug", entry.clip.offset, 0.20, 1.0e-12);
+            if (entry.clip.sample == "c.wav")
+                expect ("c liegt eine Spur darunter und vor dem Bezug",
+                        entry.trackOffset == 1 && std::abs (entry.clip.offset + 0.05) < 1.0e-12);
+        }
+
+        // Auf der zweiten Spur bei 0,5 einfügen: die dritte Spur entsteht
+        int newTracks = 0;
+        const auto pasted = zone.pasteClips (copied, 1, 0.5, &newTracks);
+        expect ("Drei Clips eingefügt", pasted.size() == 3);
+        expect ("Eine neue Spur entstanden", newTracks == 1 && zone.tracks.size() == 3);
+        expect ("c landet in der neuen Spur", zone.tracks[2].clips.size() == 1 && zone.tracks[2].clips[0].sample == "c.wav");
+        const auto* pastedB = [&zone]() -> const sis::Clip*
+        {
+            for (const auto& c : zone.tracks[1].clips)
+                if (c.sample == "b.wav")
+                    return &c;
+            return nullptr;
+        }();
+        expect ("b liegt auf der Zielspur", pastedB != nullptr);
+        expectNear ("b landet am Einfügepunkt", pastedB != nullptr ? pastedB->offset : -1.0, 0.5, 1.0e-12);
+        expectNear ("c im selben Abstand", zone.tracks[2].clips[0].offset, 0.45, 1.0e-12);
+        expect ("Neue Kennungen", std::none_of (pasted.begin(), pasted.end(),
+                                                [&all] (juce::uint32 id) { return all.count (id) > 0; }));
+
+        // Ganz vorn eingefügt rückt alles so weit, dass c bei 0 beginnt
+        sis::Zone early;
+        early.tracks.resize (1);
+        early.pasteClips (copied, 0, 0.0);
+        double earliest = 1.0;
+        for (const auto& t : early.tracks)
+            for (const auto& c : t.clips)
+                earliest = std::min (earliest, c.offset);
+        expectNear ("Nichts landet vor 0", earliest, 0.0, 1.0e-12);
+
+        // Verschieben: a und c eine Spur tiefer, 0,1 später
+        sis::Zone moving;
+        moving.tracks.resize (2);
+        moving.tracks[0].clips = { clipAt ("a.wav", 0.30) };
+        moving.tracks[1].clips = { clipAt ("c.wav", 0.05) };
+        const auto idA = moving.tracks[0].clips[0].uid;
+        const auto idC = moving.tracks[1].clips[0].uid;
+        const std::map<juce::uint32, sis::ClipOrigin> origins { { idA, { 0.30, 0 } }, { idC, { 0.05, 1 } } };
+
+        // Der Zeiger steht weit unten: trotzdem nur eine neue Spur hinter der letzten
+        int created = 0;
+        moving.moveClips (origins, 0.1, 5, created);
+        expect ("Unten entsteht genau eine Spur", created == 1 && moving.tracks.size() == 3);
+        expect ("a ist auf Spur 2", moving.trackOfClip (idA) == 1);
+        expect ("c ist auf Spur 3", moving.trackOfClip (idC) == 2);
+        expectNear ("Und 0,1 später", moving.tracks[1].findClip (idA)->offset, 0.40, 1.0e-12);
+
+        // Zurück: die entstandene Spur verschwindet wieder, und nichts geht vor 0 oder über die erste Spur
+        moving.moveClips (origins, -1.0, -3, created);
+        expect ("Zurückgezogen verschwindet die neue Spur", created == 0 && moving.tracks.size() == 2);
+        expect ("a wieder oben", moving.trackOfClip (idA) == 0 && moving.trackOfClip (idC) == 1);
+        expectNear ("Nicht vor 0 (c war am weitesten vorn)", moving.tracks[1].findClip (idC)->offset, 0.0, 1.0e-12);
+        expectNear ("a um dasselbe Stück", moving.tracks[0].findClip (idA)->offset, 0.25, 1.0e-12);
+    }
+
+    // --- Normalisieren: Pegel des Clips ---------------------------------------------------
+    {
+        sis::SampleCache cache;
+        cache.insert (makeConstantSample ("quiet.wav", 4800, 0.25f));
+
+        auto track = makeTrack ("quiet.wav");
+        track.loop = sis::LoopMode::oneShot;
+        track.clips[0].gain = 4.0f;
+
+        auto model = makeModel ({ track });
+        auto engine = makeEngine (*model, cache);
+        const auto out = render (*engine, 2400, 60, 1.0f);
+        expectNear ("Der Clip-Pegel wirkt", out.at (1200), 1.0, 0.01);
+
+        juce::AudioFormatManager formats;
+        sis::InstrumentModel loaded;
+        loaded.fromValueTree (model->toValueTree(), formats);
+        expectNear ("Er übersteht das Speichern", loaded.zones.front().tracks.front().clips.front().gain, 4.0, 1.0e-6);
+
+        // Eine alte Datei: „gain“ an der Spur ist der Spurpegel, nicht der des Clips
+        juce::ValueTree legacyTree ("Instrument");
+        juce::ValueTree legacyZone ("Zone");
+        juce::ValueTree legacyTrack ("Track");
+        legacyTrack.setProperty ("clip", "quiet.wav", nullptr);
+        legacyTrack.setProperty ("gain", 0.3f, nullptr);
+        legacyZone.appendChild (legacyTrack, nullptr);
+        legacyTree.appendChild (legacyZone, nullptr);
+        sis::InstrumentModel legacy;
+        legacy.fromValueTree (legacyTree, formats);
+        const auto& legacyTrackRead = legacy.zones.front().tracks.front();
+        expect ("Alter Spurpegel bleibt Spurpegel, der Clip bleibt bei 1",
+                std::abs (legacyTrackRead.gain - 0.3f) < 1.0e-6f && legacyTrackRead.clips.front().gain == 1.0f);
+    }
+
+    // --- Überlappende Velocity-Zonen: Überblendung mit gleicher Leistung ------------------
+    {
+        sis::SampleCache cache;
+        cache.insert (makeConstantSample ("soft.wav", 4800, 0.25f));
+        cache.insert (makeConstantSample ("hard.wav", 4800, 1.0f));
+
+        auto model = makeModel ({});
+        model->zones.clear();
+
+        const auto zoneOf = [] (const juce::String& id, const juce::String& sample, int low, int high)
+        {
+            sis::Zone z;
+            z.id = id;
+            z.lowNote = 24;
+            z.highNote = 95;
+            z.rootNote = 60;
+            z.lowVelocity = low;
+            z.highVelocity = high;
+            auto track = makeTrack (sample);
+            track.loop = sis::LoopMode::oneShot;
+            z.tracks = { track };
+            return z;
+        };
+
+        model->zones = { zoneOf ("soft", "soft.wav", 0, 90), zoneOf ("hard", "hard.wav", 60, 127) };
+
+        const auto levelAt = [&] (int velocity)
+        {
+            auto engine = makeEngine (*model, cache);
+            return (double) render (*engine, 2400, 60, (float) velocity / 127.0f).at (1200);
+        };
+
+        const double v30 = 30.0 / 127.0, v75 = 75.0 / 127.0, v110 = 110.0 / 127.0;
+        expectNear ("Unterhalb der Überschneidung nur die leise Zone", levelAt (30), 0.25 * v30, 0.002);
+        expectNear ("Oberhalb nur die laute", levelAt (110), 1.0 * v110, 0.002);
+
+        // Mitte der Überschneidung 60 … 90: beide mit cos/sin(45°)
+        const double half = std::sqrt (0.5);
+        expectNear ("In der Mitte beide, mit gleicher Leistung", levelAt (75), (0.25 * half + 1.0 * half) * v75, 0.003);
+
+        // Die Gewichte selbst: an den Rändern der Überschneidung ganz die eine, ganz die andere
+        expectNear ("Am unteren Rand klingt die leise voll", sis::velocityWeight (0, 90, 60, 127, 60), 1.0, 1.0e-9);
+        expectNear ("Am oberen Rand ist sie still", sis::velocityWeight (0, 90, 60, 127, 90), 0.0, 1.0e-9);
+        expectNear ("Die laute blendet gegenläufig ein", sis::velocityWeight (60, 127, 0, 90, 60), 0.0, 1.0e-9);
+        expectNear ("Leistung bleibt gleich",
+                    std::pow (sis::velocityWeight (0, 90, 60, 127, 70), 2.0) + std::pow (sis::velocityWeight (60, 127, 0, 90, 70), 2.0),
+                    1.0, 1.0e-9);
+        expectNear ("Eine Zone ganz in der anderen: Schichtung, beide voll", sis::velocityWeight (40, 80, 0, 127, 60), 1.0, 1.0e-9);
+
+        // Schichtung: dieselben Grenzen – beide klingen voll zusammen
+        model->zones = { zoneOf ("a", "soft.wav", 0, 127), zoneOf ("b", "hard.wav", 0, 127) };
+        expectNear ("Gleiche Bereiche werden geschichtet", levelAt (127), 1.25, 0.003);
+
+        // Eine Zone ohne Spuren nimmt der anderen nichts weg
+        auto empty = zoneOf ("leer", "soft.wav", 60, 127);
+        empty.tracks.clear();
+        model->zones = { zoneOf ("soft", "soft.wav", 0, 90), empty };
+        expectNear ("Eine leere Zone blendet nichts aus", levelAt (85), 0.25 * 85.0 / 127.0, 0.002);
+    }
+
+    // --- Umkehren je Clip --------------------------------------------------------------
+    {
+        sis::SampleCache cache;
+        cache.insert (makeRampSample ("ramp.wav", 4800));
+
+        sis::Clip forward;
+        forward.sample = "ramp.wav";
+        forward.natural = 0.1 / sis::InstrumentModel::timelineSeconds;
+        auto backward = forward;
+        backward.uid = sis::Clip::nextUid();
+        backward.reverse = true;
+        backward.offset = 0.2 / sis::InstrumentModel::timelineSeconds;   // bei 0,2 s
+
+        auto track = makeTrack ("ramp.wav");
+        track.loop = sis::LoopMode::oneShot;
+        track.clips = { forward, backward };
+
+        auto model = makeModel ({ track });
+        auto engine = makeEngine (*model, cache);
+        const auto out = render (*engine, 16000, 60, 1.0f);
+
+        expect ("Der erste Clip läuft vorwärts (steigt)", out.at (1000) < out.at (3000));
+        expect ("Der zweite rückwärts (fällt)", out.at (10600) > out.at (12600));
+
+        // Speichern und Laden; eine Datei bis 1.15 mit „Umkehren“ an der Spur
+        juce::AudioFormatManager formats;
+        sis::InstrumentModel loaded;
+        loaded.fromValueTree (model->toValueTree(), formats);
+        const auto& clips = loaded.zones.front().tracks.front().clips;
+        expect ("Die Richtung je Clip übersteht das Speichern", clips.size() == 2 && ! clips[0].reverse && clips[1].reverse);
+
+        juce::ValueTree legacyTree ("Instrument");
+        juce::ValueTree legacyZone ("Zone");
+        juce::ValueTree legacyTrack ("Track");
+        legacyTrack.setProperty ("reverse", true, nullptr);
+        for (const auto* name : { "a.wav", "b.wav" })
+        {
+            juce::ValueTree clipNode ("Clip");
+            clipNode.setProperty ("clip", name, nullptr);
+            legacyTrack.appendChild (clipNode, nullptr);
+        }
+        legacyZone.appendChild (legacyTrack, nullptr);
+        legacyTree.appendChild (legacyZone, nullptr);
+
+        sis::InstrumentModel legacy;
+        legacy.fromValueTree (legacyTree, formats);
+        const auto& legacyClips = legacy.zones.front().tracks.front().clips;
+        expect ("Alte Datei: „Umkehren“ der Spur gilt für jeden ihrer Clips",
+                legacyClips.size() == 2 && legacyClips[0].reverse && legacyClips[1].reverse);
     }
 
     std::printf ("%d Prüfungen, %d Fehler\n", checks, failures);

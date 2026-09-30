@@ -133,6 +133,15 @@ int main()
         expectNear ("Fade-in wird nicht negativ", negative.fadeIn, 0.0);
     }
 
+    // Raster mit eigener Weite: 10 ms auf der 8-Sekunden-Achse
+    {
+        const double grid = 0.01 / 8.0;
+        expectNear ("Feines Raster rastet auf 10 ms", sis::geometry::snapTime (0.123456, true, grid) * 8.0, 0.99, 1.0e-9);
+        expectNear ("Ohne Raster bleibt der Wert", sis::geometry::snapTime (0.123456, false, grid), 0.123456);
+        const auto moved = sis::geometry::moveClip (makeClip(), 0.37, 0.05, true, 1.0, grid);
+        expectNear ("Verschieben rastet auf das feine Raster", moved.offset * 8.0, 2.56, 1.0e-9);
+    }
+
     // Schere: zwei Stücke, die zusammen den alten Clip ergeben
     {
         auto clip = makeClip();          // 0,10 … 0,60

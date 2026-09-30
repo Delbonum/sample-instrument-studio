@@ -13,8 +13,13 @@ StudioEditor::StudioEditor (StudioProcessor& p)
        beim Entwickeln praktisch ungeprüft. Mit gesetzter Umgebungsvariable zeigt auch die
        App das Plugin-Fenster – nur zum Ansehen, die Übergabe ans Studio bleibt außen vor. */
     const bool forcePluginView = juce::SystemStats::getEnvironmentVariable ("SIS_PLUGIN_VIEW", {}).isNotEmpty();
+    const bool standalone = p.wrapperType == juce::AudioProcessor::wrapperType_Standalone;
 
-    if (p.wrapperType == juce::AudioProcessor::wrapperType_Standalone && ! forcePluginView)
+    /* Eine exportierte App trägt ihr Instrument mit – wer sie bekommt, will es spielen, nicht
+       bearbeiten. Sie zeigt deshalb die Spiel-Oberfläche des Plugins statt des Studios. */
+    const bool exportedApp = standalone && p.isPlayingBundledInstrument();
+
+    if (standalone && ! forcePluginView && ! exportedApp)
     {
        #if JUCE_MAC
         constexpr bool ownTitleBar = false;   // macOS behält die native Fensterleiste
@@ -29,6 +34,10 @@ StudioEditor::StudioEditor (StudioProcessor& p)
     else
     {
         plugin = std::make_unique<PluginShell> (p);
+
+        if (exportedApp)
+            plugin->setStandaloneApp (true);
+
         addAndMakeVisible (*plugin);
         setResizable (true, true);
         setResizeLimits (720, 420, 1600, 1100);
@@ -50,6 +59,8 @@ void StudioEditor::setAudioSettingsCallback (std::function<void()> callback)
 {
     if (studio != nullptr)
         studio->onShowAudioSettings = std::move (callback);
+    else if (plugin != nullptr)
+        plugin->onShowAudioSettings = std::move (callback);
 }
 
 void StudioEditor::paint (juce::Graphics& g)

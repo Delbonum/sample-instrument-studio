@@ -51,6 +51,10 @@ public:
 
     int getIdealHeight() const;
 
+    /** Werte neu anzeigen – etwa wenn ein anderer Clip gewählt wurde (das ist keine
+        Änderung am Modell, sondern an der Auswahl). */
+    void refresh() { updateValues(); }
+
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseUp (const juce::MouseEvent&) override;

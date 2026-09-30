@@ -43,7 +43,11 @@ private:
     StudioContext& ctx;
     FlatButton backButton { "‹ Mapping"_u };
     FlatButton trimModeButton { "Zuschneiden" }, stretchModeButton { "Stretchen" };
-    FlatButton snapButton { "Raster" }, addTrackButton { "Spur hinzufügen"_u }, bounceButton { "Zone bouncen" };
+    FlatButton snapButton { "Raster 0.5 s" }, addTrackButton { "Spur hinzufügen"_u }, bounceButton { "Zone bouncen" };
+    FlatButton zoomOutButton { "−"_u }, zoomInButton { "+" };
+
+    /** Menü am Rasterknopf: aus oder eine der Rasterweiten. */
+    void showGridMenu();
 
     juce::Viewport viewport;
     TrackArea trackArea;

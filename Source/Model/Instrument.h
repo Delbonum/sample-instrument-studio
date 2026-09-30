@@ -2,7 +2,9 @@
 
 #include <JuceHeader.h>
 #include <array>
+#include <map>
 #include <optional>
+#include <set>
 #include <vector>
 
 #include "DemoWaveform.h"
@@ -142,6 +144,14 @@ struct Clip
     double fadeIn = 0.0;
     double fadeOut = 0.0;
 
+    /** Pegelfaktor des Clips (linear). 1 = wie aufgenommen; „Normalisieren“ hebt den
+        lautesten Punkt des gespielten Ausschnitts auf 0 dBFS, ohne die Datei anzufassen. */
+    float gain = 1.0f;
+
+    /** Rückwärts abspielen – je Clip, damit eine Spur einen Clip vorwärts und den nächsten
+        rückwärts tragen kann (bis 1.15 galt es für die ganze Spur). */
+    bool reverse = false;
+
     /** Kennung zur Laufzeit, für Auswahl und Ziehen. Steht nicht in der Datei: nach dem
         Laden (und nach Rückgängig) bekommt jeder Clip eine neue. */
     juce::uint32 uid = nextUid();
@@ -173,7 +183,6 @@ struct Track
     float pan = 0.0f;       // -1 … +1
     int pitch = 0;          // Halbtöne, -24 … +24
     float cents = 0.5f;     // 0 … 1, 0.5 = ±0 ct
-    bool reverse = false;
     LoopMode loop = LoopMode::oneShot;
 
     /** Nur bei Sustain-Loop und Vor/Rückwärts, beides als Anteil des **gespielten**
@@ -212,6 +221,20 @@ struct Track
     Clip& addSample (const SampleFile&, double offset);
 };
 
+/** Ein kopierter Clip und wie weit unter der obersten kopierten Spur er lag. */
+struct ClipboardClip
+{
+    Clip clip;              // Versatz relativ zum Bezugsclip (dem frühesten auf der obersten Spur)
+    int trackOffset = 0;
+};
+
+/** Ausgangslage eines Clips beim Verschieben: Zeit und Spur. */
+struct ClipOrigin
+{
+    double offset = 0.0;
+    int track = 0;
+};
+
 /** Tastatur-Zone: Tastenbereich × Velocity-Bereich, mit eigenen Spuren. */
 struct Zone
 {
@@ -245,6 +268,28 @@ struct Zone
 
     /** Die Spur, auf der ein Clip liegt, sonst -1. */
     int trackOfClip (juce::uint32 uid) const;
+
+    /** Neue, leere Spur unten („Spur N“, Farbe aus der Palette). */
+    Track& appendTrack();
+
+    /** Kopiert die Clips mit diesen Kennungen. Bezug ist der früheste Clip der obersten
+        Spur: seine Zeit wird 0, seine Spur Versatz 0; alle anderen behalten Abstand zu ihm. */
+    std::vector<ClipboardClip> copyClips (const std::set<juce::uint32>& uids) const;
+
+    /** Fügt Kopien ein: der Bezugsclip auf `targetTrack` bei `at`, die übrigen im selben
+        Zeit- und Spurabstand – fehlende Spuren darunter entstehen. Liegt ein Clip vor dem
+        Bezug und landete so vor 0, rückt alles nach rechts. Die Kopien bekommen neue
+        Kennungen und liegen obenauf; zurück kommen ihre Kennungen. */
+    std::vector<juce::uint32> pasteClips (const std::vector<ClipboardClip>&, int targetTrack, double at,
+                                          int* newTracks = nullptr);
+
+    /** Verschiebt Clips aus ihrer Ausgangslage um `timeDelta` und `rowDelta` Spuren. Nicht
+        vor 0, nicht über die erste Spur hinaus, unten höchstens eine Spur hinter die
+        letzte – die entsteht dann. `createdTracks` zählt, wie viele Spuren im Lauf einer
+        Geste so entstanden sind; wandern die Clips zurück, verschwinden diese wieder,
+        solange nichts anderes darauf liegt. Verschobene Clips liegen auf ihrer neuen Spur
+        obenauf. */
+    void moveClips (const std::map<juce::uint32, ClipOrigin>&, double timeDelta, int rowDelta, int& createdTracks);
 };
 
 /** Name eines Makros, wie er in beiden Ansichten steht. */

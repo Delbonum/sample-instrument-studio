@@ -1,4 +1,5 @@
 #include "StudioShell.h"
+#include "../../Version.h"
 #include "../../Model/XmlFile.h"
 #include "CreditsWindow.h"
 #include "MacroWindow.h"
@@ -601,7 +602,8 @@ bool StudioShell::perform (const InvocationInfo& info)
         case cmd::toggleSnap:
             ui.snapToGrid = ! ui.snapToGrid;
             ui.changed();
-            showToast (ui.snapToGrid ? "Raster ein · 1/16 der Zeitachse"_u : "Raster aus");
+            showToast (ui.snapToGrid ? "Raster ein · "_u + juce::String (ui.gridSeconds, ui.gridSeconds < 0.1 ? 2 : 1) + " s"
+                                     : juce::String ("Raster aus"));
             break;
 
         case cmd::addZone:
@@ -677,8 +679,40 @@ bool StudioShell::perform (const InvocationInfo& info)
             break;
 
         case cmd::openManual:
-            notYet ("noch nicht geschrieben");
+        {
+            /* Das Handbuch steckt im Programm. Zum Lesen kommt es in den Temp-Ordner und öffnet
+               sich im Browser – dort lässt es sich durchsuchen und drucken. */
+            const auto html = manualHtml().replace ("{{VERSION}}", versionString());
+
+            if (html.isEmpty())
+            {
+                showToast ("Das Handbuch fehlt in dieser Fassung"_u);
+                break;
+            }
+
+            const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                  .getChildFile ("Sample Instrument Studio - Handbuch.html");
+
+            // Direkt in die Datei schreiben: das Umbenennen einer Temp-Datei scheitert unter
+            // Windows gelegentlich am Virenscanner (siehe BUILDING.md)
+            bool written = false;
+            {
+                juce::FileOutputStream out (file);
+
+                if (out.openedOk())
+                {
+                    out.setPosition (0);
+                    out.truncate();
+                    written = out.writeText (html, false, false, nullptr);
+                }
+            }
+
+            if (! written)
+                showToast ("Das Handbuch ließ sich nicht ablegen"_u);
+            else if (! juce::URL (file).launchInDefaultBrowser() && ! file.startAsProcess())
+                showToast ("Kein Browser gefunden · das Handbuch liegt unter "_u + file.getFullPathName());
             break;
+        }
 
         case cmd::showShortcuts:
             juce::AlertWindow::showMessageBoxAsync (

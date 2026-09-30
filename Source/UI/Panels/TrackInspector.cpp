@@ -555,8 +555,13 @@ TrackInspectorContent::TrackInspectorContent (StudioContext& c) : ctx (c)
 
     reverseButton.onClick = [this]
     {
-        ctx.step ("Richtung umgekehrt"_u);
-        if (auto* t = getTrack()) { t->reverse = ! t->reverse; ctx.model.notifyChanged(); }
+        bool reversed = false;
+        const int changed = toggleReverse (ctx, reversed);
+
+        if (changed == 0)
+            ctx.toast ("Kein Clip auf dieser Spur"_u);
+        else if (changed > 1)
+            ctx.toast (juce::String (changed) + (reversed ? " Clips umgekehrt"_u : " Clips wieder vorwärts"_u));
     };
 
     FlatButton::Style plus;
@@ -721,11 +726,15 @@ void TrackInspectorContent::updateValues()
         algorithmBox.setSelectedItemIndex ((int) track->algorithm, juce::dontSendNotification);
         loopBox.setSelectedItemIndex ((int) track->loop, juce::dontSendNotification);
 
+        // „Umkehren“ zeigt den gewählten Clip, nicht die Spur
+        const auto* shown = currentClip (ctx.model, ctx.ui);
+        const bool reversed = shown != nullptr && shown->reverse;
+
         FlatButton::Style reverse;
         reverse.fontSize = 11.5f;
-        reverse.background = track->reverse ? colours::accentSoft : colours::white;
-        reverse.text = track->reverse ? colours::accentDark : colours::textSecondary;
-        reverse.border = track->reverse ? colours::accent : colours::lineStrongAlt;
+        reverse.background = reversed ? colours::accentSoft : colours::white;
+        reverse.text = reversed ? colours::accentDark : colours::textSecondary;
+        reverse.border = reversed ? colours::accent : colours::lineStrongAlt;
         reverseButton.setStyle (reverse);
 
         FlatButton::Style tempo = reverse;
@@ -1204,7 +1213,7 @@ void TrackInspector::changeListenerCallback (juce::ChangeBroadcaster*)
 {
     resized();
     repaint();
-    content.repaint();   // ein anderer Clip gewählt: Fades und Dehnung zeigen dessen Werte
+    content.refresh();   // ein anderer Clip gewählt: Fades, Dehnung und Umkehren zeigen dessen Werte
 }
 
 void TrackInspector::paint (juce::Graphics& g)

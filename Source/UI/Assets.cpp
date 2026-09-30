@@ -37,6 +37,16 @@ namespace
     }
 } // namespace
 
+juce::String manualHtml()
+{
+    int size = 0;
+
+    if (const auto* data = findResource ("Handbuch.html", size))
+        return juce::String::fromUTF8 (data, size);
+
+    return {};
+}
+
 FontLibrary::FontLibrary()
     : sansRegular  (loadTypeface ("IBMPlexSans-Regular.ttf")),
       sansMedium   (loadTypeface ("IBMPlexSans-Medium.ttf")),

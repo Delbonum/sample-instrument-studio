@@ -1,4 +1,4 @@
-﻿#include "PluginShell.h"
+#include "PluginShell.h"
 #include "../../PluginProcessor.h"
 #include "../../Model/XmlFile.h"
 #include "../../StudioHandover.h"
@@ -120,7 +120,16 @@ PluginShell::PluginShell (StudioProcessor& p)
 
     addAndMakeVisible (zones);
     addAndMakeVisible (keyboard);
+    audioButton.setStyle (fieldStyle);
+    audioButton.setTooltip ("Audio- und MIDI-Einstellungen");
+    audioButton.onClick = [this]
+    {
+        if (onShowAudioSettings != nullptr)
+            onShowAudioSettings();
+    };
+
     addAndMakeVisible (studioButton);
+    addChildComponent (audioButton);
     addAndMakeVisible (presetButton);
     addAndMakeVisible (playButton);
     addChildComponent (sheet);
@@ -272,18 +281,31 @@ void PluginShell::savePreset()
     }), false);
 }
 
+void PluginShell::setStandaloneApp (bool isApp)
+{
+    standaloneApp = isApp;
+    studioButton.setVisible (! isApp);
+    audioButton.setVisible (isApp);
+    sheet.setStudioButtonVisible (! isApp);
+    resized();
+    repaint();
+}
+
 void PluginShell::paint (juce::Graphics& g)
 {
     g.fillAll (colours::panel);
 
-    // Host-Leiste
-    g.setColour (colours::windowHover);
-    g.fillRect (hostBar);
-    g.setFont (monoFont (10.0f));
-    g.setColour (colours::windowText);
-    g.drawText ("HOST · INSTRUMENT"_u, hostBar.reduced (12, 0), juce::Justification::centredLeft, false);
-    g.drawText ("SISTUDIO VST3", hostBar.withTrimmedRight (studioButton.getWidth() + 18),
-                juce::Justification::centredRight, false);
+    // Host-Leiste – nur im Plugin; die App hat ihre eigene Fensterleiste
+    if (! hostBar.isEmpty())
+    {
+        g.setColour (colours::windowHover);
+        g.fillRect (hostBar);
+        g.setFont (monoFont (10.0f));
+        g.setColour (colours::windowText);
+        g.drawText ("HOST · INSTRUMENT"_u, hostBar.reduced (12, 0), juce::Justification::centredLeft, false);
+        g.drawText ("SISTUDIO VST3", hostBar.withTrimmedRight (studioButton.getWidth() + 18),
+                    juce::Justification::centredRight, false);
+    }
 
     // Kopf
     g.setColour (colours::bars);
@@ -296,7 +318,9 @@ void PluginShell::paint (juce::Graphics& g)
     h.removeFromLeft (9);
     g.setColour (colours::text);
     g.setFont (sansFont (13.0f, Weight::semibold));
-    g.drawText (processor.getModel().name, h.withTrimmedRight (presetButton.getWidth() + playButton.getWidth() + 20),
+    g.drawText (processor.getModel().name,
+                h.withTrimmedRight (presetButton.getWidth() + playButton.getWidth() + 20
+                                    + (standaloneApp ? audioButton.getWidth() + 9 : 0)),
                 juce::Justification::centredLeft, true);
 
     // Abschnittstitel über Zonenstreifen und Makros
@@ -329,7 +353,7 @@ void PluginShell::paint (juce::Graphics& g)
 void PluginShell::resized()
 {
     auto area = getLocalBounds();
-    hostBar = area.removeFromTop (30);
+    hostBar = area.removeFromTop (standaloneApp ? 0 : 30);
     header = area.removeFromTop (44);
     footer = area.removeFromBottom (26);
 
@@ -345,6 +369,13 @@ void PluginShell::resized()
         h.removeFromRight (9);
         presetButton.setBounds (h.removeFromRight (juce::jmin (190, h.getWidth() / 2))
                                     .withSizeKeepingCentre (juce::jmin (190, h.getWidth() / 2), 28));
+
+        if (standaloneApp)
+        {
+            h.removeFromRight (9);
+            const int width = audioButton.getTextWidth() + 22;
+            audioButton.setBounds (h.removeFromRight (width).withSizeKeepingCentre (width, 28));
+        }
     }
 
     area.reduce (12, 12);

@@ -19,13 +19,6 @@ enum class EdgeMode { trim, stretch };
     Rechtsklick in der Zeitleiste öffnet. */
 enum class EditTool { select, erase, split };
 
-/** Ein kopierter Clip und wie weit unter der obersten kopierten Spur er lag. */
-struct ClipboardClip
-{
-    Clip clip;              // Versatz relativ zum Bezugsclip (dem frühesten auf der obersten Spur)
-    int trackOffset = 0;
-};
-
 /** Werkzeuge im Sample-Editor. */
 enum class SampleTool { select, trim, fadeIn, fadeOut, normalise, reverse };
 
@@ -63,6 +56,12 @@ public:
 
     bool velocityLayers = true;
     bool snapToGrid = true;
+    double gridSeconds = 0.5;    // Rasterweite im Editor
+
+    /** Wie viel der Achse der Editor zeigt (1 = 8 Sekunden). Kleiner heißt hineingezoomt. */
+    double visibleLength = 1.0;
+    static constexpr double minVisibleLength = 1.0 / 32.0;   // 0,25 s
+    static constexpr double maxVisibleLength = 4.0;          // 32 s
     EdgeMode edgeMode = EdgeMode::trim;
 
     /** Auswahl im Sample-Editor, als Anteil des ganzen Samples. */
@@ -176,4 +175,32 @@ struct StudioContext
         Ohne Namen heißt der Schritt einfach „Änderung“ – erfasst wird er so oder so. */
     std::function<void (const juce::String&)> step;
 };
+/** „Umkehren“: gilt den gewählten Clips der Zone, wenn der gezeigte Clip dazugehört, sonst
+    nur dem gezeigten. Alle bekommen dieselbe Richtung – die umgekehrte des gezeigten.
+    Gibt die Zahl der umgeschalteten Clips zurück (0, wenn es keinen gab). */
+inline int toggleReverse (StudioContext& ctx, bool& nowReversed)
+{
+    auto* shown = currentClip (ctx.model, ctx.ui);
+    auto* zone = ctx.model.getSelectedZone();
+
+    if (shown == nullptr || zone == nullptr)
+        return 0;
+
+    nowReversed = ! shown->reverse;
+    const bool wholeSelection = ctx.ui.isClipSelected (shown->uid);
+    int changed = 0;
+
+    ctx.step (nowReversed ? "Umgekehrt"_u : "Wieder vorwärts"_u);
+
+    for (auto& track : zone->tracks)
+        for (auto& clip : track.clips)
+            if (&clip == shown || (wholeSelection && ctx.ui.isClipSelected (clip.uid)))
+            {
+                clip.reverse = nowReversed;
+                ++changed;
+            }
+
+    ctx.model.notifyChanged();
+    return changed;
+}
 } // namespace sis

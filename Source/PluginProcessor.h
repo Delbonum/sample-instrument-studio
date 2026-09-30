@@ -59,6 +59,10 @@ public:
     float getOutputLevel() const noexcept                   { return outputLevel.load (std::memory_order_relaxed); }
     juce::int64 getSampleMemoryBytes() const                { return sampleCache.getTotalBytes(); }
 
+    /** Lautester Betrag im gespielten Ausschnitt eines Clips (0, wenn das Sample fehlt).
+        Grundlage für „Normalisieren“. */
+    float peakOf (const Clip&) const;
+
     /** Ob die Zone überhaupt Audiodaten hat – sonst bleibt sie stumm. */
     bool zoneHasAudio (const Zone&) const;
 

@@ -416,6 +416,19 @@ bool StudioProcessor::loadBundledInstrument()
     return true;
 }
 
+float StudioProcessor::peakOf (const Clip& clip) const
+{
+    const auto data = sampleCache.get (clip.sample);
+
+    if (data == nullptr || data->getNumSamples() < 2)
+        return 0.0f;
+
+    const int total = data->getNumSamples();
+    const int start = juce::jlimit (0, total - 1, (int) (clip.trimStart * total));
+    const int end = juce::jlimit (start + 1, total, (int) std::ceil (clip.trimEnd * total));
+    return data->buffer.getMagnitude (start, end - start);
+}
+
 bool StudioProcessor::zoneHasAudio (const Zone& zone) const
 {
     for (const auto& track : zone.tracks)

@@ -29,6 +29,13 @@ public:
     explicit PluginShell (StudioProcessor&);
     ~PluginShell() override;
 
+    /** Als exportierte App: keine Host-Leiste und kein Weg ins Studio (der Empfänger hat es
+        meist nicht), dafür ein Knopf für die Audio-Einstellungen. */
+    void setStandaloneApp (bool);
+
+    /** Nur als App: öffnet den Audio-/MIDI-Dialog. */
+    std::function<void()> onShowAudioSettings;
+
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseUp (const juce::MouseEvent&) override;
@@ -54,7 +61,8 @@ private:
     ZoneGrid zones;
     PianoKeyboard keyboard;
     std::array<MacroKnob, InstrumentModel::numMacros> macroKnobs;
-    FlatButton studioButton { "IM STUDIO ÖFFNEN ↗"_u }, presetButton, playButton;
+    FlatButton studioButton { "IM STUDIO ÖFFNEN ↗"_u }, presetButton, playButton, audioButton { "Audio …"_u };
+    bool standaloneApp = false;
     ZoneSheet sheet;
     Toast toast;
 

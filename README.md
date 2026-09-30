@@ -77,7 +77,12 @@ Der Standalone-Rahmen ist über alle Ansichten gleich, von oben nach unten:
   dort eine Spur (eine leere Spur wird gefüllt). Auf freie Fläche gezogen, entsteht eine
   neue Zone um die Taste herum – so breit, wie Platz ist, höchstens eine Oktave, im freien
   Velocity-Bereich. Auf eine Taste der Klaviatur gezogen: in deren Zone, sonst ebenso eine
-  neue. Die Ansicht wechselt dabei **nicht**; stattdessen trägt eine Zone mit Samples eine
+  neue.
+- **Überlappende Zonen**: wo sich Zonen in Tasten und Velocity überschneiden, klingen alle,
+  und die Überschneidung ist schraffiert. Ragt eine nach oben über die andere hinaus,
+  blendet über den gemeinsamen Velocity-Bereich die untere aus und die obere ein (gleiche
+  Leistung); liegt eine ganz in der anderen, klingen beide voll (Schichtung). Die gewählte
+  Zone wird obenauf gezeichnet. Die Ansicht wechselt dabei **nicht**; stattdessen trägt eine Zone mit Samples eine
   Marke mit ihrer Anzahl und unten eine kleine Wellenform, und sie leuchtet nach dem
   Ablegen kurz auf.
 - Beispieldaten: 5 Zonen – Sub Sustain (C1–B2, Velocity 0–127), Hybrid Mid (C3–F#4, 0–86),
@@ -132,13 +137,16 @@ Mapping. Sie ist **nicht** bloß eine Ansicht:
 **Zweck:** Innerhalb einer Zone mehrere Spuren (Layer) zeitlich anordnen, schneiden und mischen.
 
 - Kopfzeile: Rücksprung „‹ Mapping“, „Zone <Name>“, Hinweistext (wechselt mit dem Modus),
-  rechts: Segmentschalter **Zuschneiden | Stretchen**, Knopf **Raster**, **Spur hinzufügen**,
-  **Zone bouncen** (dunkel `#191817`, weiße Schrift).
+  rechts: Segmentschalter **Zuschneiden | Stretchen**, Zoom **− / +**, Knopf **Raster**
+  (zeigt die Rasterweite; Klick öffnet die Auswahl: aus, 10 ms, 50 ms, 100 ms, 250 ms,
+  0,5 s, 1 s), **Spur hinzufügen**, **Zone bouncen** (dunkel `#191817`, weiße Schrift).
 - **Zeitlineal**: links über den Spurköpfen die Anzeige des Locators („AB 2.50 s“), danach
-  die Sekunden des sichtbaren Ausschnitts (Mono 10 px). Sichtbar sind immer **8 Sekunden**;
-  die Achse wächst mit dem letzten Clip (bis 128 s). Ein **waagerechter Rollbalken** unter
-  den Spuren erscheint, sobald es mehr gibt; Shift+Mausrad und waagerechtes Wischen rollen
-  ebenfalls, während der Wiedergabe blättert die Ansicht mit. Ein Zoom fehlt noch.
+  die Zeit des sichtbaren Ausschnitts (Mono 10 px); die Striche werden mit dem Zoom feiner
+  oder gröber (10 ms bis 1 min). Ohne Zoom sind **8 Sekunden** sichtbar, hineingezoomt bis
+  0,25 s, herausgezoomt bis 32 s – mit **Strg+Mausrad** um den Zeiger oder mit − / +. Die
+  Achse wächst mit dem letzten Clip (bis 128 s). Ein **waagerechter Rollbalken** unter den
+  Spuren erscheint, sobald es mehr gibt; Shift+Mausrad und waagerechtes Wischen rollen
+  ebenfalls, während der Wiedergabe blättert die Ansicht mit.
 - **Locator**: Klick oder Ziehen im Lineal setzt ihn (am Raster, wenn es an ist), ein
   Klick auf die Anzeige links setzt ihn auf 0. Wiedergabe beginnt und loopt ab dort. Der
   Locator steht auch im Sample-Editor und lässt sich dort ziehen – es ist derselbe.
@@ -149,7 +157,8 @@ Mapping. Sie ist **nicht** bloß eine Ansicht:
     um; **Rechtsklick** öffnet das Spur-Menü (Spur löschen, Spur hinzufügen).
   - **Lane**: Rasterlinien alle 1 s (`#E1DED8`). Eine Spur trägt **beliebig viele Clips**.
     Clip: Hintergrund = helle Spurfarbe, 1 px Rand in Spurfarbe, gewählt 2 px `#3B2FA8`.
-    Kopfstreifen 15 px in Spurfarbe mit Samplename und Stretch-Badge (`1.28×`), darunter
+    Kopfstreifen 15 px in Spurfarbe mit Samplename und Stretch-Badge (`1.28×`, bei einem
+    normalisierten Clip davor der Pegel, `+3.2 dB · 1.00×`), darunter
     die Wellenform als Balken in Spurfarbe. Eine leere Spur zeigt „Sample aus der Liste
     hierher ziehen“.
   - **Überlappende Clips**: es klingt der obere, also zuletzt gesetzte (auch ein
@@ -172,16 +181,21 @@ Mapping. Sie ist **nicht** bloß eine Ansicht:
   mit Rand `#7A6CF0`, Text `#3B2FA8`). Darunter die **volle** Wellenform des Samples; was
   außerhalb des Zuschnitts liegt, tritt zurück, die Auswahl ist violett. Loop-Bereich und
   Überblendungen (X-FADE, schraffiert) sind **grün** und liegen immer im gespielten Teil.
-  Oben im Wellenfeld ein Streifen für den Locator.
+  Oben im Wellenfeld ein Streifen für den Locator. **Normalisieren** hebt den lautesten Punkt
+  des gespielten Ausschnitts auf 0 dBFS (höchstens +24 dB) – als Pegel des Clips, die Datei
+  bleibt unberührt; ein zweiter Klick nimmt es zurück.
 - **Linke Spalte zeigt in dieser Ansicht die gewählte Spur** (nicht die Sample-Liste):
   Gain, Pan, Fade-Längen des gewählten Clips, Tonhöhe in Halbtönen (Stepper) und Cent,
   Stretch-Faktor mit „1:1“-Rückstellknopf, Algorithmus-Auswahl (Transienten-treu /
   Glatt (Pad) / Monophon / Korn · Granular), **„Tempo beim Transponieren halten“**,
-  Umkehren-Schalter, Loop-Modus (One-Shot / Sustain-Loop / Vor-Rückwärts), bei Schleifen
+  Umkehren (je **Clip**: der gewählte bzw. alle gewählten Clips), Loop-Modus (One-Shot / Sustain-Loop / Vor-Rückwärts), bei Schleifen
   **Loop ab** und **X-Fade**, und die **Effektkette der Spur**.
 - **Transponieren**: klassisch (höher = schneller, wie jeder Sampler) oder mit gehaltenem
   Tempo – dann transponiert das Körnerverfahren des gewählten Algorithmus, und die Dauer
-  bleibt. Je Spur einstellbar, für alle Spuren auf einmal im Menü „Instrument“.
+  bleibt. Je Spur einstellbar, für alle Spuren auf einmal im Menü „Instrument“. Klassisch
+  läuft die **ganze Anordnung** mit, wie ein Tonband: eine Oktave höher beginnen auch
+  versetzte Clips doppelt so früh, und Überschneidungen und Crossfades passen bei jeder
+  Taste. Die Zeitachse des Editors zeigt den Grundton.
 - **Schleifen**: „Loop ab“ legt fest, wo die Schleife beginnt (davor klingt der Anschlag
   einmal), „X-Fade“ blendet an der Naht über. Eine Schleife blendet nur einmal ein und nie
   aus, und sie klingt bis zum nächsten Clip der Spur.
@@ -238,7 +252,9 @@ Fenster maximal 960 px breit, Rand `#BFBBB3`, auf grauem Grund `#D9D7D2` zentrie
   den Grundton der gewählten Zone — einen eigenen Transport gibt es nicht, den gibt die
   DAW vor.
 - **Zonenstreifen** 50 px: dieselben Zonen wie im Mapping, nur horizontal, mit Name und
-  Tastenbereich. Hinweis daneben: „Doppelklick öffnet die Bearbeitung“.
+  Tastenbereich. Bei einem **Drumset** stattdessen gleich breite **Pads**, nach Note
+  geordnet – ein Kit-Teil ist nur eine Taste breit und wäre sonst ein Faden. Hinweis
+  daneben: „Doppelklick öffnet die Bearbeitung“.
 - **Makros**: vier Drehregler 44 px (Kreis, Rand `#BFBBB3`, Zeiger 2 × 17 px `#7A6CF0`,
   Bereich −140° bis +140°), vertikal ziehbar.
 - **Klaviatur** 72 px, gleiche Logik wie im Standalone.
@@ -249,6 +265,10 @@ Fenster maximal 960 px breit, Rand `#BFBBB3`, auf grauem Grund `#D9D7D2` zentrie
   darunter ein **vollwertiger Sample-Editor** (96 px hohe Wellenform mit Auswahlgriffen und
   denselben sechs Werkzeugen wie im Standalone), Fußzeile mit Hinweis und Knopf
   „Im Studio bearbeiten“.
+- **Exportierte App:** zeigt diese Oberfläche statt des Studios – wer ein fertiges Instrument
+  bekommt, will es spielen. Ohne Host-Leiste und ohne „Im Studio öffnen“ (der Empfänger hat das
+  Studio meist nicht), dafür mit „Audio …“ im Kopf für Ausgabegerät und MIDI; das Fenster ist
+  960 × 560 px groß und frei skalierbar.
 - **Richtungsentscheid:** Es gibt nur den Weg Plugin → Standalone. Ein Schalter
   Standalone → Plugin wäre sinnlos, weil dafür erst eine DAW geöffnet werden müsste.
 - **Wie die Übergabe läuft:** Aus dem Plugin heraus ist die App nicht zu finden — die
@@ -323,8 +343,8 @@ Wahl. An der Karte des eingefügten Effekts steht weiterhin, woher er kommt (`In
 
 Der Segmentschalter „Zuschneiden / Stretchen“ legt fest, was eine Kante ohne Zusatztaste
 tut; Shift kehrt die Belegung um. Auf dem Clip-Körper erweitert Shift dagegen die Auswahl.
-Bei aktivem **Raster** rasten Verschieben, Kanten, Schere und Locator auf 1/16 der
-8-Sekunden-Achse (0,5 s) ein.
+Bei aktivem **Raster** rasten Verschieben, Kanten, Schere und Locator auf die gewählte
+Rasterweite ein (voreingestellt 0,5 s).
 
 **Einfügen**: der früheste Clip der obersten kopierten Spur landet am Locator auf der
 gewählten Spur; alle anderen behalten Zeit- und Spurabstand zu ihm. Fehlen darunter Spuren,
@@ -452,10 +472,6 @@ Projektdateien bis 1.11 mit dem Clip in der Spur werden weiterhin gelesen.
 
 ## Offene Entwurfsfragen
 
-- Velocity-Layer: ob Zonen sich überlappen dürfen und wie Crossfades zwischen
-  Velocity-Schichten laufen, ist noch nicht entworfen. Heute greift bei Überlappung die
-  erste passende Zone.
-- Die Zeitachse rollt, hat aber noch keinen **Zoom**.
 - Zeitbasis: bewusst **Sekunden**, nicht Takte – ein Instrument löst Klänge je Note aus und
   kennt das Songtempo nicht. Takte lohnen erst, wenn tempo-gebundene Dinge dazukommen
   (Loops, die zum Song passen sollen; Delay oder LFOs im Songtempo), und dann über das Tempo
@@ -467,6 +483,7 @@ Projektdateien bis 1.11 mit dem Clip in der Spur werden weiterhin gelesen.
   (Standalone und Plugin; die Plugin-Ansicht lässt sich im Code über den Anfangswert
   `shell: 'plugin'` zeigen). Im Browser direkt zu öffnen.
 - `assets/sis_icon.png` — Programm-Icon.
+- `docs/Handbuch.html` — das Handbuch für Anwender (F1 im Programm).
 
 ## Versionen
 
@@ -477,6 +494,8 @@ mit älteren Projektdateien, **y** neue Funktionen, **z** Fehlerbehebungen.
 
 | Version | Was dazugekommen ist |
 | --- | --- |
+| 1.16.0 | Überlappende Velocity-Zonen klingen gemeinsam, mit Überblendung über den gemeinsamen Bereich (Schraffur im Mapping); Umkehren je Clip statt je Spur; Handbuch (F1); exportierte App zeigt die Spiel-Oberfläche mit Audio-Einstellungen statt des Studios |
+| 1.15.0 | Zoom auf der Zeitachse (Strg+Mausrad, − / +), Raster wählbar von 10 ms bis 1 s; Normalisieren als Pegel des Clips; klassisches Transponieren nimmt die ganze Anordnung mit (Überschneidungen passen bei jeder Taste); Drumset-Pads in der Plugin-Ansicht; Kopieren, Einfügen und Verschieben über Spuren im Modell und getestet |
 | 1.14.0 | Menü „Instrument“: „Tempo halten“ für alle Spuren auf einmal ein- oder ausschalten (einzeln bleibt es im Inspektor umstellbar) |
 | 1.13.0 | Spur per Doppelklick auf den Spurkopf umbenennen; Schalter „Tempo beim Transponieren halten“ je Spur (Tonhöhe ohne Tempowechsel über das Stretch-Verfahren); Umlaute in Großbuchstaben-Überschriften korrigiert |
 | 1.12.0 | Beliebig viele Clips je Spur (der obere klingt, Überschneidungen schraffiert, X legt einen Crossfade); Clips und Spuren unabhängig wählbar, Shift für Mehrfachauswahl; Clips auf andere Spuren ziehen (unter die letzte: neue Spur); Entf löscht Clips, Spuren nur per Rechtsklick auf den Spurkopf; Strg+C/X/V am Locator, über mehrere Spuren hinweg (fehlende Spuren entstehen); Werkzeugleiste per gehaltenem Rechtsklick (Auswahl, Löschen, Schere); Locator auch im Sample-Editor; Menü-Kopfzeilen werden gezeichnet; Umlaute in Spur-Menü und EQ-Bändern korrigiert |
@@ -505,10 +524,10 @@ war — wer hier weitermacht, liest am besten zuerst dort.
 | Bereich | |
 | --- | --- |
 | Rahmen | Fensterleiste, Menüs, Werkzeugleiste, Statusleiste, Einblendungen, Tastenkürzel |
-| Mapping | Zonenraster, Velocity-Achse, Klaviatur, Zonen anlegen, Bereich und Velocity einstellen; Samples auf Zonen und Tasten ziehen, Marke mit Sample-Zahl |
+| Mapping | Zonenraster, Velocity-Achse, Klaviatur, Zonen anlegen, Bereich und Velocity einstellen; überlappende Zonen mit Velocity-Überblendung; Samples auf Zonen und Tasten ziehen, Marke mit Sample-Zahl |
 | Drumset | zweite Mapping-Art: gezeichnetes Schlagzeug, ein Kit-Teil je Taste, keine Verstimmung über die Tastatur; General-MIDI-Noten; Teile hinzufügen/entfernen, Spielweisen für HiHat, Snare, Ride |
 | Sample-Browser | Suche, Dateien hineinziehen, Import (liest Länge, Bittiefe, Wellenform), Zeilen in die Mitte ziehen |
-| Editor | Spuren mit beliebig vielen Clips, Überlappung mit Schraffur, Crossfade (X), Trim/Stretch/Fades, Auswahl mit Shift, Clips über Spuren ziehen, Zwischenablage, Werkzeugleiste (Auswahl, Löschen, Schere), Spuren umbenennen und löschen, Locator, waagerechtes Scrollen, Sample-Editor, Effektkette, Spur-Parameter |
+| Editor | Spuren mit beliebig vielen Clips, Überlappung mit Schraffur, Crossfade (X), Trim/Stretch/Fades, Auswahl mit Shift, Clips über Spuren ziehen, Zwischenablage, Werkzeugleiste (Auswahl, Löschen, Schere), Spuren umbenennen und löschen, Locator, Scrollen und Zoom, wählbares Raster (10 ms … 1 s), Sample-Editor mit Normalisieren, Effektkette, Spur-Parameter |
 | Rechte Spalte | Zone, Hüllkurve (ADSR), Makros |
 | Sampler-Engine | Zonen und Velocity, mehrere Clips je Spur (nur hörbare Abschnitte werden gespielt), Tonhöhe, Trim, Fades, Loop-Modi mit Loop-Beginn und Überblendung, Panorama, ADSR, 24 Stimmen |
 | Time-Stretch | Überlappungsverfahren, vier Körnungen; Dauer ändert sich ohne Tonhöhenänderung – und umgekehrt: Transponieren mit gehaltenem Tempo |
@@ -518,12 +537,13 @@ war — wer hier weitermacht, liest am besten zuerst dort.
 | Fremde Plugins | VST3-Effekte suchen, einfügen, eigene Oberfläche öffnen, Zustand im Projekt |
 | Bounce | Zone samt Effekten in eine Audiodatei rechnen und die Spuren dadurch ersetzen |
 | Undo-Verlauf | Strg+Z / Strg+Y, benannte Schritte, 60 Stufen |
-| Export | Projektordner (.sisp + Samples), VST3-Instrument mit eigenem Namen und eigener Kennung, eigenständige App |
+| Export | Projektordner (.sisp + Samples), VST3-Instrument mit eigenem Namen und eigener Kennung, eigenständige App mit der Spiel-Oberfläche |
 | Credits | Hilfe → Credits mit Entwickler und Version |
+| Handbuch | Hilfe → Handbuch (F1): `docs/Handbuch.html`, ins Programm eingebettet und im Browser geöffnet; die Version wird beim Öffnen eingesetzt |
 | Presets je Effektart | sichern, laden, löschen; „Grundstellung“ setzt auf die Werte beim Einfügen zurück |
 | Makros | Regler mit der rechten Maustaste einem der vier Makros zuweisen; „Makros zuweisen …“ zeigt und löst die Zuweisungen |
 | Effektkette | umsortieren (Pfeile), einklappen (Klick auf den Kopf), scrollen; Abschnitte in beiden Spalten einklappbar |
-| Plugin-Ansicht | Kopf mit Preset-Auswahl, Zonenstreifen, vier Drehregler, Klaviatur, Zonen-Dialog mit vollem Sample-Editor, Übergabe ans Studio |
+| Plugin-Ansicht | Kopf mit Preset-Auswahl, Zonenstreifen (bei Drumsets als Pads), vier Drehregler, Klaviatur, Zonen-Dialog mit vollem Sample-Editor, Übergabe ans Studio |
 
 ### Offen
 
@@ -536,27 +556,10 @@ ausmacht — nicht bloß, dass sich etwas ändert.
 
 **Weiteres.**
 
-- **Zoom** auf der Zeitachse (Scrollen geht, Zoomen noch nicht).
-- **Überdeckung und Transponieren**: welcher Clip wo klingt, wird in Sekunden der
-  Zeitachse berechnet. Beim klassischen Transponieren laufen Clips auf höheren Tasten
-  schneller und damit kürzer – Überschneidungen und Crossfades passen dann nur am Grundton
-  genau. Mit „Tempo halten“ stimmt es überall.
-- **Umkehren und Loop-Modus** gelten für die ganze Spur, nicht je Clip.
-- **Tests für die Editor-Gesten**: die Regeln (Schere, Crossfade, Überdeckung) sind geprüft,
-  das Verschieben über Spuren und das Einfügen über mehrere Spuren aber nur von Hand –
-  beides steckt noch in `TrackArea` und sollte, wie die übrigen Gesten, in
-  `ClipGeometry.h` wandern, damit es ohne Oberfläche prüfbar wird.
+- **Loop-Modus** gilt für die ganze Spur, nicht je Clip (Umkehren ist je Clip).
 - **Werks-Presets** für die Effekte (im Studio und in den Effekt-Plugins) fehlen — die
   Ablage steht, die Vorlagen gehören ans Ohr.
-- **Drumset in der Plugin-Ansicht**: der Zonenstreifen dort zeigt Zonen nach Tastenbreite,
-  und ein Kit-Teil ist eine einzige Taste breit — als Faden kaum zu treffen. Entweder das
-  gezeichnete Kit auch dort, oder für Drumsets eine Reihe von Pads.
-- **Exportierte App** zeigt weiterhin das ganze Studio. Die Plugin-Ansicht wäre dafür die
-  passende Oberfläche — die Entscheidung steht noch aus.
-- **Velocity-Überlappung**, siehe offene Entwurfsfragen.
 - **Audio Unit** — nur mit einer Mac-Fassung, siehe Export-Ansicht oben.
-- **Normalisieren** im Sample-Editor ist noch ein Platzhalter.
-- **Handbuch** (F1) ist nicht geschrieben.
 
 ### Was beim Weitermachen hilft
 
@@ -564,8 +567,9 @@ ausmacht — nicht bloß, dass sich etwas ändert.
   Renderplan eine Momentaufnahme ist, warum Effekt-Koeffizienten außerhalb des Audio-Threads
   entstehen, wie die Kennung im Binary gepatcht wird und wie der Undo-Verlauf hängt.
 - Drei Testprogramme laufen ohne Fenster und ohne Audiogerät: `SisClipGeometryTests`
-  (Clip-Gesten, Schere, Crossfade, Überdeckung), `SisEngineTests` (Engine, Effekte, Kit,
-  Schleifen, Transponieren), `SisProcessorTests` (Prozessor, Export, Hosting, Bounce, Undo).
+  (Clip-Gesten, Raster, Schere, Crossfade, Überdeckung), `SisEngineTests` (Engine, Effekte,
+  Kit, Schleifen, Transponieren, Kopieren/Einfügen/Verschieben über Spuren, Normalisieren),
+  `SisProcessorTests` (Prozessor, Export, Hosting, Bounce, Undo).
   Sie sind der schnellste Weg, eine Änderung zu prüfen.
 - Texte mit Umlauten oder Sonderzeichen brauchen `"…"_u` oder `juce::String::fromUTF8`,
   sonst erscheinen sie verstümmelt; Großbuchstaben über `upperCase()` aus `Text.h`, weil

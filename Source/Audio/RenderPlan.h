@@ -169,6 +169,34 @@ struct ZonePlan
     }
 };
 
+/** Anteil einer Zone, wenn sie sich im Velocity-Bereich mit einer anderen überschneidet.
+
+    Ragt die andere nach oben über diese hinaus, blendet diese über die Überschneidung aus;
+    ragt sie nach unten hinaus, blendet diese ein – beides mit gleicher Leistung, so dass der
+    Übergang von einem leisen zu einem lauten Sample weder Loch noch Buckel hat. Liegt eine
+    Zone ganz in der anderen (oder decken beide dasselbe ab), klingen beide voll: das ist
+    Schichtung, kein Übergang. */
+inline double velocityWeight (int low, int high, int otherLow, int otherHigh, int velocity) noexcept
+{
+    const auto halfPi = juce::MathConstants<double>::halfPi;
+
+    if (otherLow > low && otherHigh > high)
+    {
+        const double span = (double) (high - otherLow);
+        const double t = span > 0.0 ? juce::jlimit (0.0, 1.0, (double) (velocity - otherLow) / span) : 0.5;
+        return std::cos (t * halfPi);
+    }
+
+    if (otherLow < low && otherHigh < high)
+    {
+        const double span = (double) (otherHigh - low);
+        const double t = span > 0.0 ? juce::jlimit (0.0, 1.0, (double) (velocity - low) / span) : 0.5;
+        return std::sin (t * halfPi);
+    }
+
+    return 1.0;
+}
+
 /** Unveränderliche Momentaufnahme des Instruments für den Audio-Thread.
     Wird auf dem Message-Thread gebaut und danach nur noch gelesen. */
 struct RenderPlan : public juce::ReferenceCountedObject
@@ -184,6 +212,41 @@ struct RenderPlan : public juce::ReferenceCountedObject
             if (zone.matches (note, velocity))
                 return &zone;
         return nullptr;
+    }
+
+    static constexpr int maxZoneMatches = 8;
+
+    struct ZoneMatch
+    {
+        const ZonePlan* zone = nullptr;
+        float gain = 1.0f;
+    };
+
+    /** Alle klingenden Zonen für Note und Velocity, jede mit ihrem Anteil aus der
+        Velocity-Überblendung. Zonen ohne Spuren zählen nicht mit – sie würden nur die
+        anderen leiser machen. Ohne Speicheranforderung, für den Audio-Thread. */
+    int zonesFor (int note, int velocity, std::array<ZoneMatch, maxZoneMatches>& out) const noexcept
+    {
+        int count = 0;
+
+        for (const auto& zone : zones)
+            if (count < maxZoneMatches && zone.matches (note, velocity) && ! zone.layers.empty())
+                out[(size_t) count++] = { &zone, 1.0f };
+
+        for (int i = 0; i < count; ++i)
+        {
+            double gain = 1.0;
+            const auto& z = *out[(size_t) i].zone;
+
+            for (int j = 0; j < count; ++j)
+                if (j != i)
+                    gain *= velocityWeight (z.lowVelocity, z.highVelocity,
+                                            out[(size_t) j].zone->lowVelocity, out[(size_t) j].zone->highVelocity, velocity);
+
+            out[(size_t) i].gain = (float) gain;
+        }
+
+        return count;
     }
 
     int getNumLayers() const noexcept

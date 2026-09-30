@@ -589,7 +589,7 @@ RenderPlan::Ptr buildRenderPlan (const InstrumentModel& model, const SampleCache
                 layer.endSample = end;
                 layer.fadeInSamples = juce::jlimit (0.0, region, clip.fadeIn * region);
                 layer.fadeOutSamples = juce::jlimit (0.0, region - layer.fadeInSamples, clip.fadeOut * region);
-                layer.reverse = track.reverse;
+                layer.reverse = clip.reverse;
                 layer.loop = track.loop;
 
                 /* Schleife und Überblendung beziehen sich auf den **gespielten** Ausschnitt
@@ -608,8 +608,8 @@ RenderPlan::Ptr buildRenderPlan (const InstrumentModel& model, const SampleCache
                 // Panorama mit 0 dB in der Mitte: der angezeigte Spurpegel ist auch der gehörte,
                 // und beim Schwenken wird nichts angehoben.
                 const double pan = juce::jlimit (-1.0f, 1.0f, track.pan);
-                layer.gainLeft = (float) (track.gain * juce::jmin (1.0, 1.0 - pan));
-                layer.gainRight = (float) (track.gain * juce::jmin (1.0, 1.0 + pan));
+                layer.gainLeft = (float) (track.gain * clip.gain * juce::jmin (1.0, 1.0 - pan));
+                layer.gainRight = (float) (track.gain * clip.gain * juce::jmin (1.0, 1.0 + pan));
 
                 /* Je hörbarem Abschnitt eine Schicht. Was darüberliegende Clips verdecken,
                    bleibt still; ein Abschnitt, der am natürlichen Clip-Ende endet, braucht

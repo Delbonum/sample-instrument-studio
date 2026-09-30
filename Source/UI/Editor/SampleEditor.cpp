@@ -95,9 +95,10 @@ void SampleEditor::updateToolStyles()
     for (size_t i = 0; i < tools.size(); ++i)
     {
         const auto tool = toolDefs[i].first;
-        const auto* track = getTrack();
-        const bool on = tool == SampleTool::reverse ? (track != nullptr && track->reverse)
-                                                    : ctx.ui.tool == tool;
+        const auto* clip = getClip();
+        const bool on = tool == SampleTool::reverse  ? (clip != nullptr && clip->reverse)
+                      : tool == SampleTool::normalise ? (clip != nullptr && std::abs (clip->gain - 1.0f) > 0.001f)
+                                                      : ctx.ui.tool == tool;
 
         FlatButton::Style style;
         style.fontSize = 11.0f;
@@ -119,7 +120,7 @@ void SampleEditor::applyTool (SampleTool tool)
         return;
     }
 
-    if (clip == nullptr && tool != SampleTool::select && tool != SampleTool::reverse)
+    if (clip == nullptr && tool != SampleTool::select)
     {
         ctx.toast ("Kein Clip auf dieser Spur"_u);
         return;
@@ -159,15 +160,38 @@ void SampleEditor::applyTool (SampleTool tool)
             return;
 
         case SampleTool::normalise:
-            ctx.toast ("Normalisieren folgt mit der Audio-Engine"_u);
+        {
+            const float peak = ctx.processor.peakOf (*clip);
+
+            if (peak <= 1.0e-5f)
+            {
+                ctx.toast ("Der Ausschnitt ist still – da gibt es nichts zu normalisieren"_u);
+                return;
+            }
+
+            /* Ein zweiter Klick nimmt es zurück. Höchstens +24 dB: mehr hebt nur Rauschen. */
+            const float target = juce::jmin (16.0f, 1.0f / peak);
+            const bool undo = std::abs (clip->gain - target) < 0.001f;
+
+            ctx.step (undo ? "Normalisieren aufgehoben"_u : "Normalisiert"_u);
+            clip->gain = undo ? 1.0f : target;
+            ctx.model.notifyChanged();
+
+            const auto db = juce::Decibels::gainToDecibels (clip->gain);
+            ctx.toast (undo ? "Normalisieren aufgehoben · Pegel wie aufgenommen"_u
+                            : "Normalisiert · "_u + (db >= 0.0f ? "+" : "") + juce::String (db, 1)
+                                  + " dB · noch einmal klicken hebt es auf"_u);
             return;
+        }
 
         case SampleTool::reverse:
-            ctx.step ("Richtung umgekehrt"_u);
-            track->reverse = ! track->reverse;
-            ctx.model.notifyChanged();
-            ctx.toast (track->reverse ? "Umgekehrt abspielen: ein"_u : "Umgekehrt abspielen: aus"_u);
+        {
+            bool reversed = false;
+            const int changed = toggleReverse (ctx, reversed);
+            ctx.toast ((changed > 1 ? juce::String (changed) + " Clips " : juce::String ("Clip "))
+                       + (reversed ? "rückwärts"_u : "wieder vorwärts"_u));
             return;
+        }
     }
 }
 
@@ -271,7 +295,7 @@ void SampleEditor::paint (juce::Graphics& g)
         const bool inSelection = t >= juce::jmin (ctx.ui.selectionStart, ctx.ui.selectionEnd)
                                  && t <= juce::jmax (ctx.ui.selectionStart, ctx.ui.selectionEnd);
 
-        const float value = peaks[(size_t) (track->reverse ? bars - 1 - i : i)];
+        const float value = peaks[(size_t) (clip->reverse ? bars - 1 - i : i)];
         const float h = juce::jmax (0.04f, value) * inner.getHeight();
 
         g.setColour (! inTrim ? colours::waveOutside : (inSelection ? colours::accent : colours::waveInactive));
